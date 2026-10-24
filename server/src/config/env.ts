@@ -10,6 +10,9 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
   MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
+  SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must contain at least 32 characters'),
+  SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24).default(8),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
 });
 
 export const env = envSchema.parse(process.env);

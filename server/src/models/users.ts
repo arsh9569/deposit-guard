@@ -11,6 +11,7 @@ export interface UserRecord {
   authSubject: string;
   email: string;
   displayName: string;
+  passwordHash?: string;
   status: 'active' | 'suspended' | 'invited';
   memberships: UserMembership[];
   lastLoginAt?: Date;
@@ -32,6 +33,8 @@ const userSchema = new Schema<UserRecord>(
     authSubject: { type: String, required: true, trim: true, immutable: true },
     email: { type: String, required: true, lowercase: true, trim: true },
     displayName: { type: String, required: true, trim: true, maxlength: 160 },
+    // Argon2id/bcrypt encoded value. Never expose this field in API responses.
+    passwordHash: { type: String, select: false },
     status: {
       type: String,
       enum: ['active', 'suspended', 'invited'],
