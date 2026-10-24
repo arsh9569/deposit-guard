@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
+    "test": "node --test test/ui-contracts.test.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit --pretty"
   },

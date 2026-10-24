@@ -12,6 +12,7 @@ import { requireInstitutionRole } from '../src/middleware/authorization.js';
 import { csrfProtection } from '../src/middleware/csrf.js';
 import { requestIdMiddleware } from '../src/middleware/request-id.js';
 import { createAuthRouter } from '../src/routes/auth.js';
+import { privateDocumentFilter } from '../src/services/fdr-document-processing.js';
 
 const institutionA = '64b000000000000000000001';
 const institutionB = '64b000000000000000000002';
@@ -77,6 +78,15 @@ function makeApp(ttlMs = 60_000) {
     requireInstitutionRole(['official_reviewer'], noOpAudit),
     (req, res) => res.status(204).end(),
   );
+  app.get(
+    '/api/institutions/:institutionId/documents/:documentId',
+    authenticate,
+    requireInstitutionRole(['institution_operator', 'institution_admin'], noOpAudit),
+    (req, res) => {
+      const documentId = Array.isArray(req.params.documentId) ? req.params.documentId[0]! : req.params.documentId!;
+      res.json(privateDocumentFilter(documentId, req.institutionScope!.institutionId));
+    },
+  );
   return app;
 }
 
@@ -109,6 +119,14 @@ test('cross-institution access is denied even when caller supplies another insti
   assert.equal(response.status, 404);
 });
 
+test('institution operator cannot retrieve a document by substituting another tenant ID', async () => {
+  const agent = request.agent(makeApp());
+  await login(agent, users[0]!.email);
+  const response = await agent.get(`/api/institutions/${institutionB}/documents/64b000000000000000000099`);
+  assert.equal(response.status, 404);
+  assert.deepEqual(response.body, { error: 'Institution not found' });
+});
+
 test('role escalation in login request is rejected and cannot grant permissions', async () => {
   const agent = request.agent(makeApp());
   const csrf = await agent.get('/api/auth/csrf');
@@ -131,6 +149,14 @@ test('unauthorized approval is denied to institution operator', async () => {
     .post(`/api/institutions/${institutionA}/approve`)
     .set('x-csrf-token', csrf.body.csrfToken as string)
     .send({ action: 'approve', reason: 'Synthetic review' });
+  assert.equal(response.status, 403);
+  assert.deepEqual(response.body, { error: 'Insufficient permissions' });
+});
+
+test('unauthorized institution reviewer cannot retrieve private FDR documents', async () => {
+  const agent = request.agent(makeApp());
+  await login(agent, users[1]!.email);
+  const response = await agent.get(`/api/institutions/${institutionB}/documents/64b000000000000000000099`);
   assert.equal(response.status, 403);
   assert.deepEqual(response.body, { error: 'Insufficient permissions' });
 });
@@ -168,6 +194,20 @@ test('unknown and wrong-password login attempts return the same generic response
   assert.equal(wrong.status, 401);
   assert.deepEqual(wrong.body, unknown.body);
   assert.deepEqual(wrong.body, { error: 'Invalid email or password' });
+});
+
+test('login rate limit blocks attempts after the configured threshold', async () => {
+  const agent = request.agent(makeApp());
+  const csrf = await agent.get('/api/auth/csrf');
+  const statuses: number[] = [];
+  for (let attempt = 0; attempt < 9; attempt += 1) {
+    const response = await agent.post('/api/auth/login')
+      .set('x-csrf-token', csrf.body.csrfToken as string)
+      .send({ email: users[0]!.email, password: 'incorrect-password' });
+    statuses.push(response.status);
+  }
+  assert.deepEqual(statuses.slice(0, 8), Array(8).fill(401));
+  assert.equal(statuses[8], 429);
 });
 
 test('session identifier is rotated at login and server role is returned from membership only', async () => {

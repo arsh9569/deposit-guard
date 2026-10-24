@@ -26,6 +26,9 @@ The backend validates environment variables at startup and only reports ready wh
 - `npm run build` — type-check and build both applications
 - `npm run lint` — ESLint for both applications
 - `npm run format:check` — Prettier check
+- `npm run seed:demo --workspace @depositguard/server` — seed the local synthetic walkthrough dataset (set `DEMO_PASSWORD` first; production is refused)
+
+See [docs/demo-walkthrough.md](docs/demo-walkthrough.md) for the login roles, deterministic PDF fixtures, scenario data, and presentation order.
 
 ## Structure
 

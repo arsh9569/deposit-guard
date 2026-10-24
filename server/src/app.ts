@@ -11,6 +11,13 @@ import { csrfProtection } from './middleware/csrf.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
 import { createAuthRouter } from './routes/auth.js';
 import { healthRouter } from './routes/health.js';
+import { createFdrSubmissionRouter } from './routes/fdr-submissions.js';
+import type { DocumentExtractor } from './services/fdr-document-processing.js';
+import { createInstitutionWorkflowRouter } from './routes/institution-workflows.js';
+import type { NotificationDelivery } from './services/maturity-monitoring.js';
+import { dashboardRouter } from './routes/dashboard.js';
+import { apiErrorHandler } from './middleware/api-error.js';
+import { createVerificationRouter } from './routes/verification.js';
 
 export interface AppDependencies {
   repository?: AuthRepository;
@@ -19,6 +26,8 @@ export interface AppDependencies {
   sessionSecret?: string;
   sessionTtlMs?: number;
   production?: boolean;
+  documentExtractor?: DocumentExtractor;
+  notificationDelivery?: NotificationDelivery;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -30,7 +39,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.set('trust proxy', production ? env.TRUST_PROXY_HOPS : false);
   app.use(requestIdMiddleware);
   app.use(
-    cors({ origin: env.CLIENT_ORIGIN, credentials: true, methods: ['GET', 'POST', 'OPTIONS'] }),
+    cors({ origin: env.CLIENT_ORIGIN, credentials: true, methods: ['GET', 'POST', 'PUT', 'PATCH', 'OPTIONS'] }),
   );
   app.use(express.json({ limit: '1mb', strict: true }));
   app.use(
@@ -59,6 +68,10 @@ export function createApp(dependencies: AppDependencies = {}) {
   );
   app.use('/api', csrfProtection);
   app.use('/api/health', healthRouter);
+  app.use('/api/dashboard', dashboardRouter);
+  app.use('/api/institutions/:institutionId/fdr', createFdrSubmissionRouter(dependencies.documentExtractor));
+  app.use('/api/institutions/:institutionId/verification', createVerificationRouter({ audit: dependencies.audit }));
+  app.use('/api/institutions/:institutionId/workflows', createInstitutionWorkflowRouter({ audit: dependencies.audit, notificationDelivery: dependencies.notificationDelivery }));
   app.use(
     '/api/auth',
     createAuthRouter(
@@ -68,19 +81,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       production,
     ),
   );
-  app.use(
-    (
-      error: unknown,
-      _request: express.Request,
-      response: express.Response,
-      _next: express.NextFunction,
-    ) => {
-      // Do not disclose internals, session contents, or credentials in error responses.
-      void _next;
-      console.error('Request failed', error);
-      response.status(500).json({ error: 'Internal server error' });
-    },
-  );
+  app.use(apiErrorHandler);
   return app;
 }
 

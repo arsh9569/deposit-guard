@@ -1,5 +1,5 @@
 import mongoose, { model, Schema, Types } from 'mongoose';
-import { workflowStates, type WorkflowState } from './domain.js';
+import { renewalStatuses, type RenewalStatus } from './domain.js';
 
 export type RenewalKind = 'renewal' | 'replacement';
 
@@ -9,12 +9,12 @@ export interface RenewalRecord {
   replacementInstrumentId?: Types.ObjectId;
   requestedBy: Types.ObjectId;
   kind: RenewalKind;
-  status: WorkflowState;
+  status: RenewalStatus;
   reason: string;
   supportingDocumentIds: Types.ObjectId[];
   history: {
-    from?: WorkflowState;
-    to: WorkflowState;
+    from?: RenewalStatus;
+    to: RenewalStatus;
     actorId: Types.ObjectId;
     reason: string;
     at: Date;
@@ -25,8 +25,8 @@ export interface RenewalRecord {
 
 const renewalEventSchema = new Schema<RenewalRecord['history'][number]>(
   {
-    from: { type: String, enum: workflowStates },
-    to: { type: String, enum: workflowStates, required: true },
+    from: { type: String, enum: renewalStatuses },
+    to: { type: String, enum: renewalStatuses, required: true },
     actorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     reason: { type: String, required: true, trim: true },
     at: { type: Date, required: true },
@@ -51,7 +51,7 @@ const renewalSchema = new Schema<RenewalRecord>(
     replacementInstrumentId: { type: Schema.Types.ObjectId, ref: 'Fdr' },
     requestedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true, immutable: true },
     kind: { type: String, enum: ['renewal', 'replacement'], required: true, immutable: true },
-    status: { type: String, enum: workflowStates, required: true, default: 'requested' },
+    status: { type: String, enum: renewalStatuses, required: true, default: 'pending' },
     reason: { type: String, required: true, trim: true, maxlength: 4000 },
     supportingDocumentIds: [{ type: Schema.Types.ObjectId, ref: 'Document' }],
     history: { type: [renewalEventSchema], default: [] },

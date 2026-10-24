@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
-import { auditEvents, fdrRecords, institution, type AuditEvent } from '../features/demo-data';
+import { auditEvents, fdrRecords, institution } from '../features/demo-data';
+import { getDashboard, getVerificationAttempts, getVerificationInstruments, runVerificationAttempt, signIn, type DashboardResponse, type PortalUser, type VerificationAttempt, type VerificationInstrument } from '../lib/api';
 
 type Screen =
   'dashboard' | 'register' | 'ocr' | 'review' | 'verification' | 'compliance' | 'release' | 'audit';
 type NavItem = { id: Screen; label: string; glyph: string; capability: string };
-const OCR_STORAGE_KEY = 'depositguard.demo.ocr-corrections';
+const OCR_STORAGE_KEY = 'depositguard.demo.ocr-corrections.v2-amount-fixture';
 const nav: NavItem[] = [
   { id: 'dashboard', label: 'Overview', glyph: '◫', capability: 'dashboard:read' },
   { id: 'register', label: 'FDR register', glyph: '▤', capability: 'instruments:create' },
@@ -16,13 +17,14 @@ const nav: NavItem[] = [
   { id: 'release', label: 'Release / refund', glyph: '↻', capability: 'release:request' },
   { id: 'audit', label: 'Audit & reports', glyph: '▣', capability: 'audit:read' },
 ];
-const demoCredentials = { email: 'reviewer@depositguard.demo', password: 'DepositGuard!2026' };
-// This capability set is a single synthetic identity fixture, not an authorization mechanism.
-const demoSession = {
-  name: 'Aarav Mehta',
-  role: 'Demo institution reviewer',
-  permissions: new Set(nav.map((item) => item.capability)),
-};
+function permissionsFor(roles: string[]) {
+  const permissions = new Set<string>();
+  if (roles.includes('institution_admin')) return new Set(nav.map((item) => item.capability));
+  if (roles.includes('institution_operator')) ['dashboard:read', 'instruments:create', 'documents:review', 'verification:read', 'compliance:read', 'release:request', 'audit:read'].forEach((permission) => permissions.add(permission));
+  if (roles.includes('official_reviewer')) ['dashboard:read', 'documents:review', 'reviews:decide', 'verification:read', 'compliance:read', 'audit:read'].forEach((permission) => permissions.add(permission));
+  if (roles.includes('auditor')) ['dashboard:read', 'verification:read', 'compliance:read', 'audit:read'].forEach((permission) => permissions.add(permission));
+  return permissions;
+}
 
 function Glyph({ children }: { children: ReactNode }) {
   return (
@@ -67,17 +69,19 @@ function Tag({ children, tone = 'neutral' }: { children: ReactNode; tone?: strin
 }
 
 export function App() {
-  const [signedIn, setSignedIn] = useState(false);
+  const [sessionUser, setSessionUser] = useState<PortalUser | null>(null);
+  const signedIn = Boolean(sessionUser);
   const [expired, setExpired] = useState(false);
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState('');
-  const allowedNav = nav.filter((item) => demoSession.permissions.has(item.capability));
+  const activeMembership = sessionUser?.memberships[0];
+  const allowedNav = nav.filter((item) => permissionsFor(activeMembership?.roles ?? []).has(item.capability));
   useEffect(() => {
     if (!signedIn) return;
     const timer = window.setTimeout(
       () => {
-        setSignedIn(false);
+        setSessionUser(null);
         setExpired(true);
       },
       15 * 60 * 1000,
@@ -88,8 +92,8 @@ export function App() {
     return (
       <Login
         expired={expired}
-        onLogin={() => {
-          setSignedIn(true);
+        onLogin={(user) => {
+          setSessionUser(user);
           setExpired(false);
           setScreen('dashboard');
         }}
@@ -126,9 +130,9 @@ export function App() {
           </button>
         </div>
         <button className="institution-select">
-          <span className="institution-monogram">N</span>
+          <span className="institution-monogram">I</span>
           <span>
-            <strong>{institution.shortName}</strong>
+            <strong>Your institution</strong>
             <small>Institution workspace</small>
           </span>
           <b>⌄</b>
@@ -156,11 +160,11 @@ export function App() {
             Open help center <Arrow />
           </button>
         </div>
-        <button className="sidebar-user" onClick={() => setSignedIn(false)} title="Sign out">
-          <span className="avatar">AM</span>
+        <button className="sidebar-user" onClick={() => setSessionUser(null)} title="Sign out">
+          <span className="avatar">{sessionUser?.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
           <span>
-            <strong>{demoSession.name}</strong>
-            <small>{demoSession.role}</small>
+            <strong>{sessionUser?.displayName}</strong>
+            <small>{activeMembership?.roles.join(', ') ?? 'No institution membership'}</small>
           </span>
           <b>···</b>
         </button>
@@ -191,9 +195,9 @@ export function App() {
               ♧<i />
             </button>
             <span className="top-separator" />
-            <button className="top-account" onClick={() => setSignedIn(false)}>
-              <span className="avatar avatar-small">AM</span>
-              <span>Aarav Mehta</span>
+            <button className="top-account" onClick={() => setSessionUser(null)}>
+              <span className="avatar avatar-small">{sessionUser?.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
+              <span>{sessionUser?.displayName}</span>
               <b>⌄</b>
             </button>
           </div>
@@ -208,7 +212,8 @@ export function App() {
               </button>
             </div>
           )}
-          {screen === 'dashboard' && <Dashboard go={go} />}
+          {screen === 'dashboard' && activeMembership && <Dashboard go={go} institutionId={activeMembership.institutionId} onSessionExpired={() => setSessionUser(null)} />}
+          {screen === 'dashboard' && !activeMembership && <div className="dashboard-state state-denied" role="alert"><strong>No institution access</strong><p>Your account has no active institution membership.</p></div>}
           {screen === 'register' && (
             <Registration
               onDone={(message) => {
@@ -219,7 +224,7 @@ export function App() {
           )}
           {screen === 'ocr' && <OcrReview onDone={setToast} />}
           {screen === 'review' && <ReviewConsole onDone={setToast} />}
-          {screen === 'verification' && <Verification />}
+          {screen === 'verification' && activeMembership && <Verification institutionId={activeMembership.institutionId} roles={activeMembership.roles} />}
           {screen === 'compliance' && <Compliance go={go} />}
           {screen === 'release' && <ReleaseRequests onDone={setToast} />}
           {screen === 'audit' && <AuditReports />}
@@ -235,7 +240,7 @@ export function App() {
   );
 }
 
-function Login({ onLogin, expired }: { onLogin: () => void; expired: boolean }) {
+function Login({ onLogin, expired }: { onLogin: (user: PortalUser) => void; expired: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -252,18 +257,14 @@ function Login({ onLogin, expired }: { onLogin: () => void; expired: boolean }) 
       return;
     }
     setBusy(true);
-    await new Promise((resolve) => window.setTimeout(resolve, 600));
-    if (
-      email.trim().toLowerCase() !== demoCredentials.email ||
-      password !== demoCredentials.password
-    ) {
+    try {
+      const user = await signIn(email.trim(), password);
       setBusy(false);
-      setError(
-        'We couldn’t sign you in with those details. Check your email and password, then try again.',
-      );
-      return;
+      onLogin(user);
+    } catch (error) {
+      setBusy(false);
+      setError(error instanceof Error ? error.message : 'Sign-in failed. Try again.');
     }
-    onLogin();
   };
   return (
     <div className="login-page">
@@ -317,7 +318,7 @@ function Login({ onLogin, expired }: { onLogin: () => void; expired: boolean }) 
           <p className="subdued">Sign in to your institution workspace.</p>
           {expired && (
             <div className="alert alert-warn" role="alert">
-              Your demo session expired. Sign in again to continue.
+              Your session expired. Sign in again to continue.
             </div>
           )}
           {error && (
@@ -338,9 +339,7 @@ function Login({ onLogin, expired }: { onLogin: () => void; expired: boolean }) 
             <label htmlFor="login-password">Password</label>
             <button
               type="button"
-              onClick={() =>
-                setError('Use the synthetic demo credentials below for this prototype.')
-              }
+              onClick={() => setError('Ask your institution administrator to reset your password.')}
             >
               Forgot password?
             </button>
@@ -363,27 +362,8 @@ function Login({ onLogin, expired }: { onLogin: () => void; expired: boolean }) 
               </>
             )}
           </button>
-          <div className="demo-credentials">
-            <div>
-              <i />
-              Prototype access
-            </div>
-            <p>Use this synthetic reviewer identity to explore the screens.</p>
-            <code>{demoCredentials.email}</code>
-            <code>{demoCredentials.password}</code>
-            <button
-              type="button"
-              onClick={() => {
-                setEmail(demoCredentials.email);
-                setPassword(demoCredentials.password);
-              }}
-            >
-              Fill demo credentials
-            </button>
-          </div>
           <div className="login-note">
-            <span>◇</span> The server determines real roles. This prototype uses a fixed demo
-            identity.
+            <span>◇</span> Your institution membership and permissions come from the server.
           </div>
         </form>
         <div className="login-copyright">
@@ -442,71 +422,55 @@ function SectionTag({ children }: { children: ReactNode }) {
   return <span className="section-tag">{children}</span>;
 }
 
-function Dashboard({ go }: { go: (page: Screen) => void }) {
-  const metrics = [
-    {
-      title: 'Total FDRs',
-      value: '04',
-      note: 'Across this institution',
-      symbol: '▤',
-      color: 'mint',
-      page: 'compliance' as Screen,
-    },
-    {
-      title: 'Pending review',
-      value: '02',
-      note: 'Awaiting official scrutiny',
-      symbol: '⌗',
-      color: 'gold',
-      page: 'review' as Screen,
-    },
-    {
-      title: 'Expiring in 30 days',
-      value: '01',
-      note: `Next maturity · ${fdrRecords[0].daysToMaturity} days`,
-      symbol: '◷',
-      color: 'peach',
-      page: 'compliance' as Screen,
-    },
-    {
-      title: 'Matured instruments',
-      value: '01',
-      note: 'Action needs to be recorded',
-      symbol: '◷',
-      color: 'lilac',
-      page: 'compliance' as Screen,
-    },
-  ];
+function Dashboard({ go, institutionId, onSessionExpired }: { go: (page: Screen) => void; institutionId: string; onSessionExpired: () => void }) {
+  const [data, setData] = useState<DashboardResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ message: string; denied: boolean } | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true); setError(null); setData(null);
+    getDashboard(institutionId).then((result) => {
+      if (active) setData(result);
+    }).catch((reason: unknown) => {
+      if (active) setError({ message: reason instanceof Error ? reason.message : 'Dashboard data could not be loaded.', denied: Boolean(reason && typeof reason === 'object' && 'status' in reason && [401, 403, 404].includes((reason as { status: number }).status)) });
+    }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [institutionId, reloadKey]);
+  const counts = data?.metrics;
+  const soonest = data?.metrics.maturityQueue.find((record) => record.daysToMaturity >= 0);
+  const metrics = data ? [
+    { title: 'Total FDRs', value: counts!.totalFdrs, note: 'Across this institution', symbol: '▤', color: 'mint', page: 'compliance' as Screen },
+    { title: 'Pending review', value: counts!.pendingReview, note: 'Awaiting official scrutiny', symbol: '⌗', color: 'gold', page: 'review' as Screen },
+    { title: `Maturing in ${data.windowDays} days`, value: counts!.expiringWithinWindow, note: soonest ? `Next maturity · ${soonest.daysToMaturity} days` : 'Within configured window', symbol: '◷', color: 'peach', page: 'compliance' as Screen },
+    { title: 'Overdue instruments', value: counts!.matured, note: 'Maturity date has passed', symbol: '◷', color: 'lilac', page: 'compliance' as Screen },
+  ] : [];
+  const dateLabel = new Intl.DateTimeFormat('en-IN', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).format(new Date()).toUpperCase();
   return (
     <>
       <PageTitle
-        overline="SATURDAY, OCTOBER 24, 2026"
-        title="Good afternoon, Aarav"
-        description="Here’s the latest on your institution’s deposits and actions."
+        overline={dateLabel}
+        title={`Good afternoon, ${data?.displayName ?? 'there'}`}
+        description="Live figures from your institution’s DepositGuard records."
         action={<Button onClick={() => go('register')}>＋ &nbsp;Register an FDR</Button>}
       />
-      <div className="demo-banner">
-        <span>i</span>
-        <div>
-          <strong>Demo workspace</strong>
-          <p>All institutions, records, people, and activity here are fictional sample data.</p>
-        </div>
-        <button onClick={() => go('audit')} aria-label="View sample data details">
-          ↗
-        </button>
-      </div>
+      {error && <div className={`dashboard-state ${error.denied ? 'state-denied' : 'state-error'}`} role="alert">
+        <strong>{error.message.startsWith('Your session expired') ? 'Session expired' : error.denied ? 'Dashboard access denied' : 'Dashboard unavailable'}</strong><p>{error.message}</p>
+        {error.message.startsWith('Your session expired') ? <Button kind="secondary" onClick={onSessionExpired}>Sign in again</Button> : !error.denied && <Button kind="secondary" onClick={() => setReloadKey((key) => key + 1)}>Retry</Button>}
+      </div>}
       <div className="metrics-grid">
-        {metrics.map((item) => (
+        {loading ? <div className="dashboard-state" role="status"><span className="spinner" /> Loading institution metrics…</div> : metrics.map((item) => (
           <button key={item.title} className="metric-card" onClick={() => go(item.page)}>
             <div>
               <span>{item.title}</span>
               <i className={`metric-symbol ${item.color}`}>{item.symbol}</i>
             </div>
-            <strong>{item.value}</strong>
+            <strong>{item.value.toLocaleString()}</strong>
             <small>{item.note}</small>
           </button>
         ))}
       </div>
+      {!loading && !error && counts?.totalFdrs === 0 && <div className="dashboard-state dashboard-empty"><strong>No FDR records yet</strong><p>This institution has no instruments in the API response.</p><Button onClick={() => go('register')}>Register an FDR</Button></div>}
       <div className="dashboard-columns">
         <Panel className="action-panel">
           <PanelHeading
@@ -520,29 +484,26 @@ function Dashboard({ go }: { go: (page: Screen) => void }) {
           />
           <div className="queue-totals">
             <div>
-              <b>02</b>
-              <span>renewal actions pending</span>
+              <b>{counts?.pendingRenewals ?? '—'}</b>
+              <span>renewal actions open</span>
             </div>
             <i />
             <div>
-              <b>01</b>
-              <span>release / refund request</span>
+              <b>{counts?.pendingReleaseRequests ?? '—'}</b>
+              <span>release / refund requests open</span>
             </div>
           </div>
           <div className="queue-list">
-            {fdrRecords
-              .filter((r) => r.daysToMaturity < 0 || r.daysToMaturity <= 46)
-              .map((record) => (
-                <div className="queue-item" key={record.reference}>
+            {!loading && !error && counts?.maturityQueue.length === 0 && <div className="dashboard-state dashboard-empty">No upcoming or overdue maturities.</div>}
+            {counts?.maturityQueue.map((record) => (
+                <div className="queue-item" key={record.instrumentId}>
                   <div className={`days-box ${record.daysToMaturity < 0 ? 'days-overdue' : ''}`}>
                     <b>{Math.abs(record.daysToMaturity)}</b>
                     <small>{record.daysToMaturity < 0 ? 'DAYS LATE' : 'DAYS LEFT'}</small>
                   </div>
                   <div className="queue-info">
                     <strong>{record.reference}</strong>
-                    <span>
-                      {record.bank} · {record.amountLabel}
-                    </span>
+                    <span>{record.bankName} · {record.amount}</span>
                   </div>
                   <Tag
                     tone={
@@ -580,7 +541,8 @@ function Dashboard({ go }: { go: (page: Screen) => void }) {
               </button>
             }
           />
-          <ActivityList events={auditEvents.slice(0, 4)} />
+          {!loading && !error && data?.recentActivity.length === 0 && <div className="dashboard-state dashboard-empty">No recent activity recorded.</div>}
+          {data?.recentActivity.map((event, index) => <div className="activity-row" key={`${event.targetId ?? event.action}-${index}`}><span className="activity-icon blue">◇</span><span><strong>{event.action.replaceAll('.', ' ')}</strong><small>{event.reason ?? event.targetType} · {new Date(event.occurredAt).toLocaleString()}</small></span></div>)}
         </Panel>
       </div>
       <div className="shortcut-grid">
@@ -599,7 +561,7 @@ function Dashboard({ go }: { go: (page: Screen) => void }) {
           <i className="shortcut-icon lilac">⌗</i>
           <span>
             <strong>Review document extraction</strong>
-            <small>2 documents ready for review</small>
+            <small>Open document review queue</small>
           </span>
           <Arrow />
         </button>
@@ -616,42 +578,27 @@ function Dashboard({ go }: { go: (page: Screen) => void }) {
   );
 }
 
-function ActivityList({ events, compact = false }: { events: AuditEvent[]; compact?: boolean }) {
-  return (
-    <div className={`activity-list ${compact ? 'activity-compact' : ''}`}>
-      {events.map((event) => (
-        <div className="activity-row" key={event.id}>
-          <span className={`activity-icon ${event.tone}`}>
-            {event.icon === 'shield'
-              ? '◇'
-              : event.icon === 'comment'
-                ? '↩'
-                : event.icon === 'refresh'
-                  ? '↻'
-                  : event.icon === 'plus'
-                    ? '+'
-                    : event.icon === 'edit'
-                      ? '✎'
-                      : '▤'}
-          </span>
-          <span className="activity-description">
-            <strong>{event.title}</strong>
-            <small>{event.detail}</small>
-          </span>
-          <span className="activity-time">{event.when}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function Registration({ onDone }: { onDone: (message: string) => void }) {
-  const [file, setFile] = useState('');
+  const [file, setFile] = useState<File | null>(null);
   const [draft, setDraft] = useState(false);
   const [message, setMessage] = useState('');
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!event.currentTarget.reportValidity()) return;
+    const dates = [...event.currentTarget.querySelectorAll<HTMLInputElement>('input[type="date"]')];
+    const issueDate = dates[0]?.value;
+    const maturityDate = dates[1]?.value;
+    const validityDate = dates[2]?.value;
+    if (!issueDate || !maturityDate || maturityDate <= issueDate || (validityDate && validityDate < maturityDate)) {
+      setDraft(false);
+      setMessage('Check that maturity follows the issue date and validity does not end before maturity.');
+      return;
+    }
+    if (file && (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type) || file.size > 25 * 1024 * 1024)) {
+      setDraft(false);
+      setMessage('Choose a PDF, JPEG, or PNG file up to 25 MiB.');
+      return;
+    }
     setDraft(false);
     setMessage(
       file
@@ -746,10 +693,10 @@ function Registration({ onDone }: { onDone: (message: string) => void }) {
               <input
                 type="file"
                 accept=".pdf,image/png,image/jpeg"
-                onChange={(e) => setFile(e.target.files?.[0]?.name ?? '')}
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
               <span>{file ? '✓' : '↥'}</span>
-              <strong>{file || 'Drop your document here, or browse'}</strong>
+              <strong>{file?.name || 'Drop your document here, or browse'}</strong>
               <small>PDF or image · selection stays in this browser · no file is uploaded</small>
             </label>
           </Panel>
@@ -794,13 +741,22 @@ function Field({
   children: ReactNode;
   required?: boolean;
 }) {
+  const fieldId = useId();
+  let linkedControl = false;
+  const linkedChildren = Children.map(children, (child) => {
+    if (!linkedControl && isValidElement(child) && ['input', 'select', 'textarea'].includes(String(child.type))) {
+      linkedControl = true;
+      return cloneElement(child as React.ReactElement<Record<string, unknown>>, { id: fieldId });
+    }
+    return child;
+  });
   return (
     <div className="field">
-      <label>
+      <label htmlFor={fieldId}>
         {label}
         {required && <i> *</i>}
       </label>
-      {children}
+      {linkedChildren}
     </div>
   );
 }
@@ -815,7 +771,7 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
     issue: record.issueDate,
     maturity: record.maturityDate,
   };
-  const extraction = { ...original, maturity: '12 Nov 2026' };
+  const extraction = { ...original, amount: '2450000', maturity: record.maturityDate };
   const [values, setValues] = useState(() => {
     try {
       const stored = sessionStorage.getItem(OCR_STORAGE_KEY);
@@ -852,14 +808,13 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
     { key: 'reference', label: 'FDR number', value: original.reference, confidence: 98 },
     { key: 'bank', label: 'Bank name', value: original.bank, confidence: 95 },
     { key: 'holder', label: 'Account holder', value: original.holder, confidence: 87 },
-    { key: 'amount', label: 'Deposit amount', value: '₹25,00,000', confidence: 94 },
+    { key: 'amount', label: 'Deposit amount', value: '₹25,00,000', confidence: 94, mismatch: true },
     { key: 'issue', label: 'Issue date', value: original.issue, confidence: 91 },
     {
       key: 'maturity',
       label: 'Maturity date',
-      value: '12 Nov 2026',
+      value: record.maturityDate,
       confidence: 72,
-      mismatch: true,
     },
   ];
   const change = (key: keyof typeof original, value: string) => {
@@ -869,7 +824,7 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
   return (
     <>
       <PageTitle
-        overline="DOCUMENT WORKSPACE · 01 OF 02"
+        overline="DOCUMENT WORKSPACE · PRETESTED FIXTURE"
         title="Review extracted details"
         description="Compare OCR observations with the submitted values. Corrections are saved separately from the original extraction."
         action={<Tag tone="blue">OCR complete</Tag>}
@@ -879,7 +834,7 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
           ← Back to queue
         </button>
         <span>
-          FDR-2026-018 <i>·</i> Uploaded today at 10:42 AM
+          FDR-2026-018 <i>·</i> Pretested synthetic PDF fixture · deterministic extraction
         </span>
       </div>
       <div className="ocr-grid">
@@ -910,9 +865,9 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
               <div className="paper-title">FIXED DEPOSIT RECEIPT</div>
               <div className="paper-details">
                 <PaperLine label="Name of depositor" value={record.holder} />
-                <PaperLine label="Principal amount" value={record.amountLabel} />
+                <PaperLine label="Principal amount" value="₹24,50,000" warning />
                 <PaperLine label="Date of deposit" value={record.issueDate} />
-                <PaperLine label="Date of maturity" value="12 Nov 2026" warning />
+                <PaperLine label="Date of maturity" value={record.maturityDate} />
                 <PaperLine label="Branch" value="Bengaluru Main Branch" />
                 <PaperLine label="Interest type" value="Cumulative · Quarterly" />
               </div>
@@ -934,7 +889,7 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
               <h2>Extracted fields</h2>
               <p>Compare the values, then edit where necessary.</p>
             </div>
-            <Tag tone="green">Complete</Tag>
+            <Tag tone="green">Pretested fixture</Tag>
           </div>
           <div className="extraction-legend">
             <span>Confidence</span>
@@ -1095,9 +1050,9 @@ function ReviewConsole({ onDone }: { onDone: (message: string) => void }) {
                 <Tag tone="gold">1 field</Tag>
               </div>
               <section>
-                <strong>Maturity date</strong>
-                <span>Submitted: {record.maturityDate}</span>
-                <b>Document: 12 Nov 2026</b>
+                <strong>Principal amount</strong>
+                <span>Submitted: ₹25,00,000</span>
+                <b>Document: ₹24,50,000</b>
                 <Tag tone="gold">Mismatch</Tag>
               </section>
             </div>
@@ -1155,115 +1110,68 @@ function ReviewConsole({ onDone }: { onDone: (message: string) => void }) {
   );
 }
 
-function Verification() {
-  const [running, setRunning] = useState(false);
-  const [attempts, setAttempts] = useState(1);
-  const run = () => {
-    setRunning(true);
-    window.setTimeout(() => {
-      setRunning(false);
-      setAttempts((n) => n + 1);
-    }, 700);
+function Verification({ institutionId, roles }: { institutionId: string; roles: string[] }) {
+  const [instruments, setInstruments] = useState<VerificationInstrument[]>([]);
+  const [attempts, setAttempts] = useState<VerificationAttempt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyInstrumentId, setBusyInstrumentId] = useState('');
+  const [error, setError] = useState('');
+  const canInitiate = roles.includes('institution_operator') || roles.includes('institution_admin');
+  useEffect(() => {
+    let active = true;
+    Promise.all([getVerificationInstruments(institutionId), getVerificationAttempts(institutionId)])
+      .then(([available, history]) => { if (active) { setInstruments(available); setAttempts(history); setError(''); } })
+      .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Verification data could not be loaded.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [institutionId]);
+  const run = async (instrument: VerificationInstrument) => {
+    setBusyInstrumentId(instrument.id); setError('');
+    try {
+      const attempt = await runVerificationAttempt(institutionId, instrument.id);
+      setAttempts((current) => [attempt, ...current]);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Verification attempt failed.'); }
+    finally { setBusyInstrumentId(''); }
   };
   return (
     <>
       <PageTitle
         overline="INSTRUMENT EVIDENCE"
         title="Verification record"
-        description="Review provider responses separately from document extraction and official scrutiny."
-        action={
-          <Button kind="secondary" onClick={run} disabled={running}>
-            {running ? 'Checking fixture…' : '↻ &nbsp;Run demo attempt'}
-          </Button>
-        }
+        description="Run and review deterministic provider fixtures. Every response is recorded as simulated, never bank confirmation."
       />
       <div className="simulation-warning">
         <div className="warning-mark">◇</div>
         <div>
-          <strong>SIMULATED BANK RESPONSE — NOT BANK CONFIRMED</strong>
+          <strong>SIMULATED PROVIDER RESPONSES — NOT BANK CONFIRMED</strong>
           <p>
-            This is a deterministic demonstration response. No bank was contacted; the result is not
-            evidence of bank verification.
+            These deterministic fixtures do not contact a bank and cannot establish that an FDR is genuine.
           </p>
         </div>
         <Tag tone="blue">DEMO ONLY</Tag>
       </div>
-      <div className="verification-grid">
-        <Panel className="verification-record">
-          <div className="verification-result">
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      <Panel>
+        <PanelHeading title="Available verification fixtures" detail="Initiation is restricted to institution operators and administrators." />
+        {loading ? <div role="status">Loading verification fixtures…</div> : instruments.filter((item) => /^FDR-2026-02[1-4]$/.test(item.reference)).map((instrument) => (
+          <div className="attempt-row" key={instrument.id}>
             <span>◇</span>
-            <div>
-              <small>LATEST ATTEMPT · {String(attempts).padStart(2, '0')}</small>
-              <h2>{running ? 'Running demo response…' : 'Simulated match'}</h2>
-              <p>
-                {running
-                  ? 'Waiting for the deterministic local fixture.'
-                  : 'The synthetic response matched the sample values for selected fields.'}
-              </p>
-            </div>
-            <Tag tone="blue">SIMULATED</Tag>
+            <div><strong>{instrument.reference}</strong><small>{instrument.bankName} · ₹{Number(instrument.principalAmount).toLocaleString('en-IN')}</small></div>
+            {canInitiate ? <Button kind="secondary" disabled={busyInstrumentId === instrument.id} onClick={() => void run(instrument)}>{busyInstrumentId === instrument.id ? 'Recording…' : 'Run simulated attempt'}</Button> : <Tag tone="neutral">Review only</Tag>}
           </div>
-          <div className="verification-meta">
-            {[
-              ['Mode', 'Simulated adapter'],
-              ['Provider', 'DepositGuard deterministic demo'],
-              ['Attempt reference', `SIM-DG-2026-${String(attempts).padStart(4, '0')}`],
-              ['Result', 'Sample fields matched'],
-              ['Timestamp', '24 Oct 2026 · 03:17 PM IST'],
-            ].map(([key, value]) => (
-              <div key={key}>
-                <small>{key}</small>
-                <strong>{value}</strong>
-              </div>
-            ))}
+        ))}
+      </Panel>
+      <Panel>
+        <PanelHeading title="Verification history" detail="Every attempt is retained with its provider, mode, outcome, and non-confirmation label." />
+        {loading ? <div role="status">Loading attempt history…</div> : attempts.length === 0 ? <div className="dashboard-empty">No verification attempts recorded yet.</div> : attempts.map((attempt) => (
+          <div className="attempt-row" key={attempt.id}>
+            <span>◇</span>
+            <div><strong>{instruments.find((item) => item.id === attempt.instrumentId)?.reference ?? attempt.instrumentId}</strong><small>{attempt.provider} · {attempt.status} · {attempt.responseSummary}</small></div>
+            <Tag tone="blue">{attempt.label}</Tag>
           </div>
-          <div className="response-card">
-            <div>
-              <strong>Supporting response details</strong>
-              <small>Fixture response · synthetic sample data</small>
-            </div>
-            <pre>
-              {JSON.stringify(
-                {
-                  mode: 'SIMULATED',
-                  provider: 'depositguard-demo-adapter',
-                  attemptReference: `SIM-DG-2026-${String(attempts).padStart(4, '0')}`,
-                  matchedFields: ['instrumentReference', 'principalAmount', 'holderName'],
-                  message: 'Synthetic fixture only. No bank contact occurred.',
-                },
-                null,
-                2,
-              )}
-            </pre>
-          </div>
-        </Panel>
-        <div className="verification-aside">
-          <Panel>
-            <span className="side-emblem">▤</span>
-            <small>INSTRUMENT</small>
-            <h3>{fdrRecords[0].reference}</h3>
-            <p>{fdrRecords[0].bank}</p>
-            <strong>{fdrRecords[0].amountLabel}</strong>
-          </Panel>
-          <Panel>
-            <PanelHeading title="Attempt history" detail="Each attempt is a separate record" />
-            {Array.from({ length: attempts }, (_, index) => (
-              <div className="attempt-row" key={index}>
-                <span>◇</span>
-                <div>
-                  <strong>SIM-DG-2026-{String(attempts - index).padStart(4, '0')}</strong>
-                  <small>Deterministic demo · 24 Oct 2026</small>
-                </div>
-                <Tag tone="blue">Simulated</Tag>
-              </div>
-            ))}
-          </Panel>
-          <div className="adapter-note">
-            Provider adapters are replaceable. Live integration requires separate credentials,
-            approval, and evidence rules.
-          </div>
-        </div>
-      </div>
+        ))}
+      </Panel>
+      <div className="adapter-note">A simulated match is not genuine bank verification. No bank was contacted.</div>
     </>
   );
 }
@@ -1432,6 +1340,7 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
 }
 
 function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
+  const releaseInstrument = fdrRecords.find((item) => item.reference === 'FDR-2024-220') ?? fdrRecords[2]!;
   const [creating, setCreating] = useState(false);
   const [reason, setReason] = useState('');
   const [file, setFile] = useState('');
@@ -1496,7 +1405,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
           <form onSubmit={request}>
             <div className="fields-grid">
               <Field label="Instrument" required>
-                <select defaultValue={fdrRecords[2].reference}>
+                  <select defaultValue={releaseInstrument.reference}>
                   {fdrRecords.map((r) => (
                     <option key={r.reference}>
                       {r.reference} · {r.bank}
@@ -1525,7 +1434,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
                   accept=".pdf,image/png,image/jpeg"
                   onChange={(e) => setFile(e.target.files?.[0]?.name ?? '')}
                 />
-                {file && <small>{file}</small>}
+            {file && <small>{file}</small>}
                 <small>File selection is local to this prototype; no document is uploaded.</small>
               </Field>
             </div>
@@ -1552,7 +1461,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
             <div className="request-heading">
               <div>
                 <small>REFUND REQUEST · RR-2026-004</small>
-                <h2>{fdrRecords[2].reference}</h2>
+                <h2>{releaseInstrument.reference}</h2>
               </div>
               <Tag
                 tone={
@@ -1573,7 +1482,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
               </div>
               <div>
                 <small>Instrument amount</small>
-                <strong>{fdrRecords[2].amountLabel}</strong>
+                <strong>{releaseInstrument.amountLabel}</strong>
               </div>
               <div>
                 <small>Requested</small>

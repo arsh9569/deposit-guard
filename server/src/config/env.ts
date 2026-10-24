@@ -2,7 +2,8 @@ import dotenv from 'dotenv';
 import { z } from 'zod';
 
 if (process.env.NODE_ENV !== 'production') {
-  dotenv.config({ path: '.env.development' });
+  dotenv.config({ path: '.env' });
+  dotenv.config({ path: '.env.development', override: true });
 }
 
 const envSchema = z.object({

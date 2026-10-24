@@ -9,6 +9,10 @@ export interface FdrRecord {
   daysToMaturity: number;
   workflow: string;
   escalated: boolean;
+  scenario?: string;
+  supersedes?: string;
+  supersededBy?: string;
+  verification?: 'simulated_match' | 'simulated_mismatch';
 }
 
 const dateFromToday = (offset: number) => {
@@ -35,6 +39,7 @@ export const fdrRecords: FdrRecord[] = [
     daysToMaturity: 21,
     workflow: 'Renewal requested',
     escalated: false,
+    scenario: 'Submitted · awaiting official review · OCR amount mismatch',
   },
   {
     reference: 'FDR-2025-042',
@@ -47,6 +52,8 @@ export const fdrRecords: FdrRecord[] = [
     daysToMaturity: 46,
     workflow: 'Replacement in progress',
     escalated: false,
+    scenario: 'Replacement instrument · predecessor history retained',
+    supersedes: 'FDR-2024-106',
   },
   {
     reference: 'FDR-2024-106',
@@ -57,8 +64,10 @@ export const fdrRecords: FdrRecord[] = [
     issueDate: '04 Sep 2023',
     maturityDate: dateFromToday(-12),
     daysToMaturity: -12,
-    workflow: 'Release request pending',
+    workflow: 'Matured · release request pending',
     escalated: true,
+    scenario: 'Predecessor · release/refund awaiting authorization',
+    supersededBy: 'FDR-2025-042',
   },
   {
     reference: 'FDR-2026-003',
@@ -67,12 +76,91 @@ export const fdrRecords: FdrRecord[] = [
     amount: 1250000,
     amountLabel: '₹12,50,000',
     issueDate: '02 Apr 2025',
-    maturityDate: dateFromToday(210),
-    daysToMaturity: 210,
+    maturityDate: dateFromToday(12),
+    daysToMaturity: 12,
     workflow: 'Active',
     escalated: false,
+    scenario: 'Maturity reminder due soon',
+  },
+  {
+    reference: 'FDR-2024-220',
+    bank: 'Canara Bank',
+    holder: 'Northbridge Institute of Technology',
+    amount: 1800000,
+    amountLabel: '₹18,00,000',
+    issueDate: '04 Sep 2024',
+    maturityDate: dateFromToday(-5),
+    daysToMaturity: -5,
+    workflow: 'Release/refund awaiting authorization',
+    escalated: true,
+    scenario: 'Release/refund request under scrutiny',
+  },
+  {
+    reference: 'FDR-2026-021',
+    bank: 'Punjab National Bank',
+    holder: 'Northbridge Institute of Technology',
+    amount: 900000,
+    amountLabel: '₹9,00,000',
+    issueDate: '20 Jun 2026',
+    maturityDate: dateFromToday(180),
+    daysToMaturity: 180,
+    workflow: 'Simulated match',
+    escalated: false,
+    scenario: 'Deterministic mock match · not bank confirmed',
+    verification: 'simulated_match',
+  },
+  {
+    reference: 'FDR-2026-022',
+    bank: 'Union Bank of India',
+    holder: 'Northbridge Institute of Technology',
+    amount: 1100000,
+    amountLabel: '₹11,00,000',
+    issueDate: '02 Jul 2026',
+    maturityDate: dateFromToday(240),
+    daysToMaturity: 240,
+    workflow: 'Simulated mismatch',
+    escalated: false,
+    scenario: 'Deterministic mock mismatch · not bank confirmed',
+    verification: 'simulated_mismatch',
+  },
+  {
+    reference: 'FDR-2026-023',
+    bank: 'Bank of Baroda',
+    holder: 'Northbridge Institute of Technology',
+    amount: 700000,
+    amountLabel: '₹7,00,000',
+    issueDate: '15 Jul 2026',
+    maturityDate: dateFromToday(210),
+    daysToMaturity: 210,
+    workflow: 'Simulated not found',
+    escalated: false,
+    scenario: 'Deterministic mock · reference not found · not bank confirmed',
+  },
+  {
+    reference: 'FDR-2026-024',
+    bank: 'Indian Bank',
+    holder: 'Northbridge Institute of Technology',
+    amount: 600000,
+    amountLabel: '₹6,00,000',
+    issueDate: '25 Jul 2026',
+    maturityDate: dateFromToday(270),
+    daysToMaturity: 270,
+    workflow: 'Simulated unavailable',
+    escalated: false,
+    scenario: 'Deterministic mock · service unavailable · not bank confirmed',
   },
 ];
+
+/** Stable walkthrough order and fixture values for the synthetic demonstration. */
+export const demoWalkthrough = [
+  { step: 1, screen: 'FDR register', reference: 'FDR-2026-018', outcome: 'Draft saved and submitted for official review' },
+  { step: 2, screen: 'Document review', reference: 'FDR-2026-018', outcome: 'Pretested PDF extraction reads ₹24,50,000 against submitted ₹25,00,000' },
+  { step: 3, screen: 'Official scrutiny', reference: 'FDR-2026-018', outcome: 'Correction request is recorded in the audit history' },
+  { step: 4, screen: 'Verification', reference: 'FDR-2026-021 to FDR-2026-024', outcome: 'Deterministic simulated match, mismatch, not found, and unavailable outcomes; always Not Bank Confirmed' },
+  { step: 5, screen: 'Maturity & actions', reference: 'FDR-2026-003 / FDR-2026-018', outcome: 'Upcoming reminder and replacement link to FDR-2024-106' },
+  { step: 6, screen: 'Release / refund', reference: 'RR-2026-004 · FDR-2024-220', outcome: 'Scrutiny and authorization; completion remains separate' },
+  { step: 7, screen: 'Overview, then Audit & reports', reference: 'Northbridge Institute', outcome: 'Live dashboard metrics plus searchable synthetic activity history' },
+] as const;
 
 export interface AuditEvent {
   id: string;
@@ -92,13 +180,26 @@ export const auditEvents: AuditEvent[] = [
   {
     id: 'a1',
     title: 'Review returned for correction',
-    detail: 'Maturity date needs supporting evidence',
+    detail: 'OCR amount ₹24,50,000 differs from submitted ₹25,00,000; correction requested',
     actor: 'Priya Nair',
     initials: 'PN',
     avatarColor: 'rose',
     category: 'Review',
     reference: 'FDR-2026-018',
     when: 'Today, 2:42 PM',
+    tone: 'amber',
+    icon: 'comment',
+  },
+  {
+    id: 'a8',
+    title: 'Official requested correction',
+    detail: 'Principal amount mismatch · original document and extraction retained',
+    actor: 'Priya Nair',
+    initials: 'PN',
+    avatarColor: 'rose',
+    category: 'Review',
+    reference: 'FDR-2026-018',
+    when: '24 Oct 2026, 2:42 PM',
     tone: 'amber',
     icon: 'comment',
   },

@@ -10,8 +10,11 @@ export const auditWriter: AuditWriter = {
       institutionId: event.institutionId ? new Types.ObjectId(event.institutionId) : undefined,
       actorId: event.actorId ? new Types.ObjectId(event.actorId) : undefined,
       action: event.action,
-      targetType: 'authentication',
+      targetType: event.targetType ?? 'authentication',
+      targetId: event.targetId ? new Types.ObjectId(event.targetId) : undefined,
+      actorRoleSnapshot: event.actorRoleSnapshot ?? [],
       requestId: event.requestId,
+      reason: event.reason,
       metadataRedacted: event.metadataRedacted ?? {},
     });
   },

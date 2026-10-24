@@ -1183,6 +1183,19 @@ textarea:focus-visible {
   background: #fff5f2;
   color: #9d5b4e;
 }
+
+.dashboard-state {
+  padding: 18px 20px;
+  margin: 12px 0;
+  border: 1px solid var(--line, #dce4e1);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--ink, #18342d);
+}
+.dashboard-state p { margin: 5px 0 12px; color: var(--muted, #667873); }
+.dashboard-state.state-denied { border-color: #e5c5a9; background: #fff8f2; }
+.dashboard-state.state-error { border-color: #e7c0c0; background: #fff7f7; }
+.dashboard-empty { color: var(--muted, #667873); }
 .alert-warn {
   border: 1px solid #f2e4c8;
   background: #fffaf0;

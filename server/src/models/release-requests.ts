@@ -10,6 +10,8 @@ export interface ReleaseRequestRecord {
   requestType: ReleaseRequestType;
   reason: string;
   supportingDocumentIds: Types.ObjectId[];
+  idempotencyKey?: string;
+  requestFingerprint?: string;
   status: WorkflowState;
   scrutinyObservations: string[];
   approvedBy?: Types.ObjectId;
@@ -52,11 +54,9 @@ const releaseSchema = new Schema<ReleaseRequestRecord>(
     supportingDocumentIds: {
       type: [{ type: Schema.Types.ObjectId, ref: 'Document' }],
       required: true,
-      validate: {
-        validator: (documentIds: Types.ObjectId[]) => documentIds.length > 0,
-        message: 'At least one supporting document is required',
-      },
     },
+    idempotencyKey: { type: String, trim: true, maxlength: 128, immutable: true },
+    requestFingerprint: { type: String, match: /^[a-f0-9]{64}$/i, immutable: true },
     status: { type: String, enum: workflowStates, required: true, default: 'requested' },
     scrutinyObservations: { type: [String], default: [] },
     approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -89,6 +89,10 @@ releaseSchema.index(
 releaseSchema.index(
   { institutionId: 1, instrumentId: 1, createdAt: -1 },
   { name: 'release_instrument_history' },
+);
+releaseSchema.index(
+  { institutionId: 1, requestedBy: 1, idempotencyKey: 1 },
+  { name: 'release_request_idempotency', unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
 );
 
 export const ReleaseRequestModel =

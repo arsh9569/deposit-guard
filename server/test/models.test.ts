@@ -22,6 +22,7 @@ import {
   reviewActionSchema,
   verificationAdapterResultSchema,
   verificationRequestSchema,
+  workflowPolicyUpdateSchema,
   workflowActionSchema,
 } from '../src/validators/model-schemas.js';
 
@@ -168,7 +169,7 @@ test('release request requires supporting evidence and completion requires separ
   assert.equal(releaseRequestSchema.safeParse(request).success, true);
   assert.equal(
     releaseRequestSchema.safeParse({ ...request, supportingDocumentIds: [] }).success,
-    false,
+    true,
   );
   assert.equal(
     workflowActionSchema.safeParse({ action: 'record_completion', reason: 'Processed' }).success,
@@ -182,6 +183,19 @@ test('release request requires supporting evidence and completion requires separ
     }).success,
     true,
   );
+});
+
+test('institution workflow policy thresholds and evidence requirements are configurable', () => {
+  const policy = {
+    maturityReminderDays: [],
+    dashboardMaturityWindowDays: 45,
+    notificationMaxAttempts: 7,
+    notificationRetryBaseMinutes: 30,
+    releaseEvidenceRequired: false,
+    requireReplacementForRenewalCompletion: true,
+  };
+  assert.deepEqual(workflowPolicyUpdateSchema.safeParse(policy).data, policy);
+  assert.equal(workflowPolicyUpdateSchema.safeParse({ ...policy, maturityReminderDays: [-1] }).success, false);
 });
 
 test('Mongoose FDR validation checks required references, amount and date order', async () => {
@@ -239,11 +253,7 @@ test('release model refuses completion without separately recorded evidence and 
     supportingDocumentIds: [],
     status: 'requested',
   });
-  await assert.rejects(noEvidence.validate(), (error: unknown) => {
-    assert.ok(error instanceof MongooseError.ValidationError);
-    assert.ok(error.errors.supportingDocumentIds);
-    return true;
-  });
+  await noEvidence.validate();
 });
 
 test('review and audit history schemas mark provenance fields immutable', () => {
@@ -253,6 +263,7 @@ test('review and audit history schemas mark provenance fields immutable', () => 
   assert.equal(AuditLogModel.schema.path('action')?.options.immutable, true);
   assert.equal(AuditLogModel.schema.path('metadataRedacted')?.options.immutable, true);
   assert.equal(OcrExtractionModel.schema.path('provider')?.options.immutable, true);
+  assert.equal(OcrExtractionModel.schema.path('rawResult')?.options.immutable, true);
   assert.equal(OcrCorrectionModel.schema.path('correctedValue')?.options.immutable, true);
 });
 
@@ -277,6 +288,10 @@ test('requested domain models expose institution and workflow indexes', () => {
     'institutionId,verificationStatus,updatedAt',
   ]);
   assert.ok(DocumentModel.schema.path('instrumentId'));
+  assert.ok(ReleaseRequestModel.schema.path('idempotencyKey'));
+  const releaseIdempotencyIndex = ReleaseRequestModel.schema.indexes().find(([keys]) => Object.keys(keys).join(',') === 'institutionId,requestedBy,idempotencyKey');
+  assert.equal(releaseIdempotencyIndex?.[1].unique, true);
+  assert.deepEqual(releaseIdempotencyIndex?.[1].partialFilterExpression, { idempotencyKey: { $type: 'string' } });
   assert.ok(RenewalRecordModel.schema.path('sourceInstrumentId'));
   assert.ok(RenewalRecordModel.schema.path('replacementInstrumentId'));
   assert.ok(UserModel.schema.path('memberships'));

@@ -9,5 +9,6 @@ export { RenewalRecordModel } from './renewal-records.js';
 export { ReviewActionModel } from './review-actions.js';
 export { UserModel } from './users.js';
 export { VerificationAttemptModel } from './verification-attempts.js';
+export { WorkflowPolicyModel } from './workflow-policies.js';
 export { institutionScopedFilter } from './tenant-scope.js';
 export * from './domain.js';

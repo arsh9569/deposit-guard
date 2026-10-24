@@ -29,5 +29,9 @@ export interface AuditWriter {
     requestId: string;
     metadataRedacted?: Record<string, unknown>;
     institutionId?: string;
+    actorRoleSnapshot?: InstitutionRole[];
+    targetType?: string;
+    targetId?: string;
+    reason?: string;
   }): Promise<void>;
 }

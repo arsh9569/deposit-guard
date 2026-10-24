@@ -17,6 +17,7 @@ export interface OcrExtractionRecord {
   providerVersion?: string;
   status: OcrJobStatus;
   fields: ExtractedField[];
+  rawResult?: unknown;
   failureCode?: string;
   startedAt?: Date;
   completedAt?: Date;
@@ -61,6 +62,7 @@ const extractionSchema = new Schema<OcrExtractionRecord>(
     providerVersion: { type: String, trim: true, immutable: true },
     status: { type: String, enum: ocrJobStatuses, required: true, default: 'queued' },
     fields: { type: [extractedFieldSchema], default: [] },
+    rawResult: { type: Schema.Types.Mixed, immutable: true, select: false },
     failureCode: { type: String, trim: true },
     startedAt: { type: Date },
     completedAt: { type: Date },

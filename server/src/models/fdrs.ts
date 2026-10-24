@@ -51,15 +51,15 @@ const fdrSchema = new Schema<FdrRecord>(
       required: true,
       immutable: true,
     },
-    reference: { type: String, required: true, trim: true, maxlength: 80 },
-    instrumentNumber: { type: String, required: true, trim: true, maxlength: 120 },
-    bankName: { type: String, required: true, trim: true, maxlength: 160 },
-    branchName: { type: String, required: true, trim: true, maxlength: 160 },
-    holderName: { type: String, required: true, trim: true, maxlength: 240 },
+    reference: { type: String, required: function () { return this.submissionStatus !== 'draft'; }, trim: true, maxlength: 80 },
+    instrumentNumber: { type: String, required: function () { return this.submissionStatus !== 'draft'; }, trim: true, maxlength: 120 },
+    bankName: { type: String, required: function () { return this.submissionStatus !== 'draft'; }, trim: true, maxlength: 160 },
+    branchName: { type: String, required: function () { return this.submissionStatus !== 'draft'; }, trim: true, maxlength: 160 },
+    holderName: { type: String, required: function () { return this.submissionStatus !== 'draft'; }, trim: true, maxlength: 240 },
     accountReferenceEncrypted: { type: String, select: false },
     principalAmount: {
       type: Schema.Types.Decimal128,
-      required: true,
+      required: function () { return this.submissionStatus !== 'draft'; },
       validate: {
         validator: (amount: Types.Decimal128) =>
           /^\d{1,16}(\.\d{1,2})?$/.test(amount.toString()) &&
@@ -74,12 +74,12 @@ const fdrSchema = new Schema<FdrRecord>(
       match: /^[A-Z]{3}$/,
       default: 'INR',
     },
-    issueDate: { type: Date, required: true },
-    maturityDate: { type: Date, required: true },
+    issueDate: { type: Date, required: function (this: FdrRecord): boolean { return this.submissionStatus !== 'draft'; } },
+    maturityDate: { type: Date, required: function (this: FdrRecord): boolean { return this.submissionStatus !== 'draft'; } },
     validUntil: { type: Date },
     documentIds: [{ type: Schema.Types.ObjectId, ref: 'Document' }],
     sourceRenewalId: { type: Schema.Types.ObjectId, ref: 'RenewalRecord', immutable: true },
-    supersedesInstrumentId: { type: Schema.Types.ObjectId, ref: 'Fdr', immutable: true },
+    supersedesInstrumentId: { type: Schema.Types.ObjectId, ref: 'Fdr' },
     supersededByInstrumentIds: [{ type: Schema.Types.ObjectId, ref: 'Fdr' }],
     dataRevision: { type: Number, required: true, min: 1, default: 1 },
     submissionStatus: {
@@ -114,7 +114,7 @@ fdrSchema.pre('validate', function () {
 
 fdrSchema.index(
   { institutionId: 1, reference: 1 },
-  { unique: true, name: 'fdr_institution_reference_unique' },
+  { unique: true, name: 'fdr_institution_reference_unique', partialFilterExpression: { reference: { $type: 'string' } } },
 );
 fdrSchema.index({ institutionId: 1, maturityDate: 1 }, { name: 'fdr_institution_maturity' });
 fdrSchema.index(

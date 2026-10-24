@@ -35,6 +35,7 @@ export const verificationStatuses = [
   'running',
   'match',
   'mismatch',
+  'not_found',
   'inconclusive',
   'unavailable',
   'failed',
@@ -45,6 +46,7 @@ export const verificationAttemptStatuses = [
   'running',
   'match',
   'mismatch',
+  'not_found',
   'inconclusive',
   'unavailable',
   'failed',
@@ -84,6 +86,9 @@ export const workflowStates = [
   'withdrawn',
 ] as const;
 export type WorkflowState = (typeof workflowStates)[number];
+
+export const renewalStatuses = ['pending', 'requested', 'submitted', 'under_review', 'more_information_required', 'approved', 'denied', 'in_progress', 'completed', 'withdrawn'] as const;
+export type RenewalStatus = (typeof renewalStatuses)[number];
 
 export const notificationStates = ['unread', 'read', 'dismissed'] as const;
 export type NotificationState = (typeof notificationStates)[number];

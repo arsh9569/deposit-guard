@@ -4,6 +4,7 @@ coverage/
 *.tsbuildinfo
 .env
 .env.*
+.private-documents/
 !.env.example
 !.env.development.example
 !.env.production.example

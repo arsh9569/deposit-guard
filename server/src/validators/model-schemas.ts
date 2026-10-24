@@ -81,6 +81,24 @@ export const fdrCreateSchema = z
   });
 export type FdrCreateInput = z.infer<typeof fdrCreateSchema>;
 
+export const fdrDraftSchema = z.strictObject({
+  reference: fdrFields.reference.optional(),
+  instrumentNumber: fdrFields.instrumentNumber.optional(),
+  bankName: fdrFields.bankName.optional(),
+  branchName: fdrFields.branchName.optional(),
+  holderName: fdrFields.holderName.optional(),
+  principalAmount: positiveMoneySchema.optional(),
+  currency: z.string().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).optional(),
+  issueDate: validCalendarDate.optional(),
+  maturityDate: validCalendarDate.optional(),
+  validUntil: validCalendarDate.optional(),
+}).refine((input) => !input.issueDate || !input.maturityDate || input.maturityDate > input.issueDate, {
+  path: ['maturityDate'], message: 'Maturity date must be later than issue date',
+}).refine((input) => !input.validUntil || !input.maturityDate || input.validUntil >= input.maturityDate, {
+  path: ['validUntil'], message: 'Validity cannot end before maturity',
+});
+export type FdrDraftInput = z.infer<typeof fdrDraftSchema>;
+
 // Update DTO is an allowlist. Institution, creator, revisions, and workflow summaries are not user-editable fields.
 export const fdrUpdateSchema = z
   .strictObject({
@@ -181,6 +199,7 @@ export type ReviewActionInput = z.infer<typeof reviewActionSchema>;
 
 export const renewalRequestSchema = z.strictObject({
   sourceInstrumentId: objectIdSchema,
+  replacementInstrumentId: objectIdSchema.optional(),
   kind: z.enum(['renewal', 'replacement']),
   reason: safeString(4000),
   supportingDocumentIds: z.array(objectIdSchema).max(20).default([]),
@@ -191,9 +210,29 @@ export const releaseRequestSchema = z.strictObject({
   instrumentId: objectIdSchema,
   requestType: z.enum(['security_release', 'matured_refund', 'partial_release']),
   reason: safeString(4000),
-  supportingDocumentIds: z.array(objectIdSchema).min(1).max(20),
+  supportingDocumentIds: z.array(objectIdSchema).max(20),
 });
 export type ReleaseRequestInput = z.infer<typeof releaseRequestSchema>;
+
+export const renewalTransitionSchema = z.strictObject({
+  action: z.enum(['submit', 'approve', 'deny', 'request_information', 'start_processing', 'complete', 'withdraw']),
+  reason: safeString(4000),
+  replacementInstrumentId: objectIdSchema.optional(),
+});
+export const releaseTransitionSchema = z.strictObject({
+  action: z.enum(['start_scrutiny', 'request_information', 'approve', 'deny', 'complete']),
+  reason: safeString(4000),
+  observations: z.array(safeString(1000)).max(40).default([]),
+  completionEvidenceRef: safeString(500).optional(),
+});
+export const workflowPolicyUpdateSchema = z.strictObject({
+  maturityReminderDays: z.array(z.number().int().min(0).max(3650)).max(50),
+  dashboardMaturityWindowDays: z.number().int().min(0).max(3650),
+  notificationMaxAttempts: z.number().int().min(1).max(20),
+  notificationRetryBaseMinutes: z.number().int().min(1).max(10080),
+  releaseEvidenceRequired: z.boolean(),
+  requireReplacementForRenewalCompletion: z.boolean(),
+});
 
 export const workflowActionSchema = z
   .strictObject({
