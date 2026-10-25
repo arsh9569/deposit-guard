@@ -1,0 +1,481 @@
+/* AICTE unified theme. Import AFTER the existing main CSS. Login stays styled by aicte-login.css. */
+
+/* Dashboard-only navy theme; existing login is unaffected. Import after existing CSS. */
+.portal { --aicte-navy:#102b4e; --aicte-blue:#1261b1; --aicte-border:#e3e9f1; background:#f5f8fc; color:#1c304b; }
+.portal .sidebar { background:#102b4e !important; color:#eaf2ff !important; border-right:1px solid #254567 !important; }
+.portal .sidebar .brand { color:#fff !important; }
+.portal .sidebar .brand strong { color:#fff !important; font-weight:800; letter-spacing:.3px; }
+.portal .sidebar .brand small { color:#b5cbe4 !important; font-size:10px; letter-spacing:.8px; }
+.portal .sidebar .brand-shield { background:#1d4672 !important; color:#f5c15a !important; border-radius:50%; }
+.portal .sidebar .institution-select { background:#18395e !important; color:#f5f9ff !important; border:1px solid #315578 !important; }
+.portal .sidebar .institution-select strong,.portal .sidebar .institution-select small { color:#e5efff !important; }
+.portal .sidebar .institution-monogram { background:#315a83 !important; color:#fff !important; }
+.portal .sidebar .nav-caption { color:#92abc7 !important; }
+.portal .sidebar .nav-link { color:#c7d7eb !important; background:transparent !important; border-color:transparent !important; }
+.portal .sidebar .nav-link:hover { background:#1c416a !important; color:white !important; }
+.portal .sidebar .nav-link.nav-current { background:#1663b2 !important; color:#fff !important; font-weight:700; }
+.portal .sidebar .nav-link .glyph { color:inherit !important; }
+.portal .sidebar .nav-badge { background:#f2c56e !important; color:#173653 !important; }
+.portal .sidebar .help-box { background:#193b61 !important; border-color:#355679 !important; color:#f4f8ff !important; }
+.portal .sidebar .help-box strong,.portal .sidebar .help-box p,.portal .sidebar .help-box button { color:#e4f0ff !important; }
+.portal .sidebar .sidebar-user { background:#153455 !important; color:white !important; border-color:#345678 !important; }
+.portal .sidebar .sidebar-user strong,.portal .sidebar .sidebar-user small { color:#f1f7ff !important; }
+.portal .topbar { background:#fff !important; border-bottom:1px solid #e3e9f1 !important; }
+.portal .page-shell { background:#f5f8fc !important; }
+.portal .content { background:#f5f8fc !important; }
+.portal .breadcrumbs strong,.portal .page-title h1 { color:#142e50 !important; }
+.portal .button-primary,.portal .page-title-action .button { background:#135fae !important; border-color:#135fae !important; color:white !important; }
+.portal .button-primary:hover,.portal .page-title-action .button:hover { background:#0c4e94 !important; }
+.portal .metric-card,.portal .panel,.portal .shortcut-grid > button { background:#fff !important; border:1px solid #e2e8f1 !important; box-shadow:0 3px 12px rgba(17,48,84,.045) !important; }
+.portal .metric-card strong,.portal .panel-heading h2 { color:#163456 !important; }
+.portal .nav-current,.portal .inline-link { color:#1766b3; }
+.portal .metric-symbol.blue,.portal .activity-icon.blue { background:#e8f2ff !important; color:#1263b5 !important; }
+.portal .metric-symbol.mint { background:#e9f3ff !important; color:#1263b5 !important; }
+.portal .portal-footer { background:#fff !important; border-top:1px solid #e5eaf2 !important; }
+@media(max-width:760px){ .portal .sidebar { box-shadow:8px 0 25px rgba(0,0,0,.16); } }
+
+
+/* AICTE navy/blue styling for Document Review (OCR). Scoped to .portal only.
+   Load AFTER your existing styles and aicte-dashboard.css. */
+.portal { --ocr-blue:#155da6; --ocr-navy:#112d50; }
+.portal .workspace-toolbar { color:#536b86; }
+.portal .workspace-toolbar .inline-link { color:var(--ocr-blue) !important; font-weight:650; }
+.portal .ocr-grid { gap:22px; align-items:start; }
+.portal .ocr-grid .panel { background:#fff !important; border:1px solid #dce5f0 !important; border-radius:13px; box-shadow:0 5px 20px rgba(13,42,77,.055) !important; overflow:hidden; }
+.portal .preview-header,.portal .preview-footer { background:#fff !important; border-color:#dfe8f2 !important; }
+.portal .preview-header strong,.portal .extraction-header h2 { color:var(--ocr-navy) !important; }
+.portal .preview-header .file-icon { background:#e6f0fc !important; color:var(--ocr-blue) !important; }
+.portal .paper-wrap { background:#eaf0f7 !important; }
+.portal .fake-paper { box-shadow:0 8px 25px rgba(17,45,80,.12); }
+.portal .paper-title { background:#e8f1fc !important; color:#123f70 !important; }
+.portal .extraction-header { border-color:#e0e8f2 !important; }
+.portal .extraction-legend { color:#69809a; }
+.portal .extract-columns { background:#f0f5fb !important; color:#526d8a !important; border-color:#dce6f1 !important; }
+.portal .extract-row { border-color:#e4ebf4 !important; }
+.portal .extract-field { color:#234364 !important; }
+.portal .extract-edit input { background:#fff !important; border:1px solid #cbd9e9 !important; color:#183554 !important; border-radius:7px; }
+.portal .extract-edit input:focus { outline:2px solid #7db5f2 !important; outline-offset:1px; border-color:#1769bc !important; }
+.portal .extract-submitted { color:#58718b !important; }
+.portal .extract-mismatch { background:#fff7ec !important; }
+.portal .extract-mismatch .extract-field small { background:#ffebc8 !important; color:#9b5800 !important; }
+.portal .preserve-note { background:#eaf3ff !important; border:1px solid #c9dff8 !important; color:#173e6b !important; border-radius:10px; }
+.portal .preserve-note strong { color:#153b69 !important; }
+.portal .ocr-actions { border-color:#e1eaf4 !important; }
+.portal .ocr-actions .button-primary { background:#155da6 !important; border-color:#155da6 !important; color:white !important; }
+.portal .ocr-actions .button-secondary { color:#155da6 !important; border-color:#bdd3eb !important; background:#f5f9ff !important; }
+.portal .ocr-actions .button-primary:hover { background:#0f4b88 !important; }
+@media(max-width:800px) { .portal .ocr-grid { grid-template-columns:minmax(0,1fr) !important; } }
+
+
+/* AICTE navy-blue styling for Official Scrutiny only.
+   Import after the existing global/dashboard/document-review CSS. */
+.portal:has(.review-layout) .content { background:#f4f7fc !important; }
+.portal:has(.review-layout) .page-title h1 { color:#102c50 !important; }
+.portal:has(.review-layout) .page-title .overline { color:#56718f !important; letter-spacing:.11em; }
+.portal:has(.review-layout) .page-title p { color:#61758e !important; }
+.portal .review-layout { gap:22px; align-items:start; }
+.portal .review-layout .panel { background:#fff !important; border:1px solid #dce6f2 !important; border-radius:14px !important; box-shadow:0 5px 20px rgba(18,48,82,.05) !important; }
+.portal .review-inbox .panel-heading h2,.portal .review-head h2 { color:#102e54 !important; }
+.portal .review-inbox .panel-heading p { color:#6b7f98 !important; }
+.portal .inbox-item { background:#fff !important; border:1px solid #e0e8f2 !important; border-radius:12px !important; color:#1d3857 !important; box-shadow:none !important; }
+.portal .inbox-item:hover { border-color:#7daee0 !important; background:#f5f9ff !important; }
+.portal .inbox-item.inbox-selected { border-color:#2474c7 !important; background:#eef5ff !important; box-shadow:inset 4px 0 0 #1765b3 !important; }
+.portal .inbox-item strong,.portal .inbox-item footer { color:#153c69 !important; }
+.portal .inbox-item small,.portal .inbox-item > span { color:#627b97 !important; }
+.portal .review-head small { color:#7589a3 !important; letter-spacing:.08em; }
+.portal .summary-grid small { color:#71849c !important; }
+.portal .summary-grid strong { color:#18395e !important; }
+/* Keep mismatch/warning orange: it conveys actual review status. */
+.portal .discrepancy-card { background:#fffaf2 !important; border:1px solid #f1d9ac !important; border-radius:12px !important; }
+.portal .discrepancy-card strong { color:#6b4818 !important; }
+.portal .supporting-file { background:#f7faff !important; border:1px solid #dce8f5 !important; border-radius:12px !important; }
+.portal .supporting-file > span { background:#e5f0ff !important; color:#1463b2 !important; }
+.portal .supporting-file strong { color:#17395f !important; }
+.portal .supporting-file button,.portal .review-layout .inline-link { color:#145fa9 !important; }
+.portal .review-layout textarea { border:1px solid #ccd9e8 !important; background:#fff !important; color:#1c3555 !important; border-radius:9px !important; }
+.portal .review-layout textarea:focus { border-color:#2374c4 !important; outline:2px solid rgba(35,116,196,.15) !important; }
+.portal .review-layout .field-label { color:#173c64 !important; }
+.portal .review-layout .button-primary { background:#155fae !important; border-color:#155fae !important; color:white !important; }
+.portal .review-layout .button-primary:hover { background:#104c8a !important; }
+.portal .review-layout .button-secondary { color:#145a9d !important; border-color:#b7cde5 !important; background:#f3f8ff !important; }
+.portal .review-integrity { border-color:#d6e5f5 !important; background:#edf5ff !important; color:#23496f !important; }
+@media(max-width:800px){ .portal .review-layout { gap:14px; } }
+
+
+/* Consistent AICTE styling across remaining authenticated screens. */
+.portal .page-title h1, .portal .panel h2, .portal .panel h3 { color:#142e50; }
+.portal .field input:not([type='file']), .portal .field select, .portal .field textarea,
+.portal .form-stack input, .portal .form-stack select { border-color:#d6e2ef; color:#193a5c; }
+.portal .field input:focus, .portal .field textarea:focus, .portal .field select:focus { outline:2px solid #8bbcf0; outline-offset:1px; }
+.portal .button-secondary { border-color:#cddded; color:#155da6; }
+.portal .button-secondary:hover { background:#eff6ff; }
+.portal .inline-link, .portal .button-quiet { color:#155da6; }
+.portal .upload-well { background:#f6faff; border-color:#b9d1ea; }
+.portal .upload-well > span, .portal .aside-emblem { background:#e8f2ff; color:#155da6; }
+.portal .policy-notice, .portal .release-notice, .portal .preserve-note { border-color:#cfe0f4; background:#eff6ff; }
+.portal .audit-table th { background:#edf4fc; color:#1d446c; }
+/* Status colors intentionally remain distinct: green success, amber warning, red overdue. */
+/* AICTE - Readability Improvements */
+/* AICTE Dashboard - Larger Readable Text */
+
+/* AICTE Dashboard - Text Readability Fix */
+
+/* All dashboard card content */
+/* =========================================
+   AICTE DASHBOARD - FONT SIZE FIX
+   ========================================= */
+
+/* Maturity queue */
+/* ==========================================
+   AICTE DASHBOARD - BALANCED TYPOGRAPHY
+   ========================================== */
+
+/* Dashboard main heading */
+.app-shell main h1 {
+  font-size: 32px !important;
+  line-height: 1.25 !important;
+  font-weight: 700 !important;
+}
+
+/* All dashboard section headings */
+.action-panel h2,
+.action-panel h3,
+.activity-panel h2,
+.activity-panel h3 {
+  font-size: 20px !important;
+  line-height: 1.35 !important;
+  font-weight: 700 !important;
+}
+
+/* Panel descriptions */
+.action-panel .panel-heading p,
+.action-panel .panel-heading span,
+.activity-panel .panel-heading p,
+.activity-panel .panel-heading span {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+/* ==========================================
+   TOP STATISTICS CARDS
+   ========================================== */
+
+.metrics-grid .metric-card {
+  min-height: 165px !important;
+  padding: 22px !important;
+}
+
+/* Total FDRs, Pending review etc. */
+.metrics-grid .metric-card p,
+.metrics-grid .metric-card span {
+  font-size: 15px !important;
+  line-height: 1.45 !important;
+}
+
+/* Numbers 9, 2, 2, 1 */
+.metrics-grid .metric-card strong,
+.metrics-grid .metric-card b {
+  font-size: 36px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+}
+
+/* Card descriptions */
+.metrics-grid .metric-card small {
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+/* ==========================================
+   MATURITY & ACTION QUEUE
+   ========================================== */
+
+.action-panel .queue-totals {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+/* Each count group */
+.action-panel .queue-totals > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Counts 1 and 3 */
+.action-panel .queue-totals b {
+  font-size: 27px !important;
+  line-height: 1.2 !important;
+  font-weight: 700 !important;
+  flex-shrink: 0;
+}
+
+/* Renewal / release descriptions */
+.action-panel .queue-totals span {
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+}
+
+/* FDR reference */
+.action-panel .queue-info strong {
+  font-size: 15px !important;
+  line-height: 1.4 !important;
+  font-weight: 700 !important;
+}
+
+/* Bank name and amount */
+.action-panel .queue-info span {
+  font-size: 13px !important;
+  line-height: 1.5 !important;
+}
+
+/* Days counter */
+.action-panel .days-box {
+  min-width: 62px;
+  min-height: 60px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.action-panel .days-box b {
+  font-size: 22px !important;
+  line-height: 1.2 !important;
+}
+
+.action-panel .days-box small {
+  font-size: 10px !important;
+  line-height: 1.3 !important;
+}
+
+/* ==========================================
+   RECENT ACTIVITY
+   ========================================== */
+
+.activity-panel .activity-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.activity-panel .activity-row > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.activity-panel .activity-row strong {
+  display: block;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  line-height: 1.45 !important;
+  overflow-wrap: anywhere;
+}
+
+.activity-panel .activity-row small {
+  display: block;
+  font-size: 13px !important;
+  line-height: 1.55 !important;
+  overflow-wrap: anywhere;
+}
+
+/* ==========================================
+   LINKS AND QUICK ACTIONS
+   ========================================== */
+
+.action-panel .inline-link,
+.activity-panel .inline-link {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+.shortcut-grid button strong {
+  font-size: 15px !important;
+}
+
+.shortcut-grid button small {
+  font-size: 13px !important;
+}
+
+/* ==========================================
+   RESPONSIVE ADJUSTMENTS
+   ========================================== */
+
+@media (max-width: 1100px) {
+  .app-shell main h1 {
+    font-size: 28px !important;
+  }
+
+  .action-panel .queue-totals {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 650px) {
+  .app-shell main h1 {
+    font-size: 25px !important;
+  }
+
+  .action-panel h2,
+  .action-panel h3,
+  .activity-panel h2,
+  .activity-panel h3 {
+    font-size: 19px !important;
+  }
+}
+/* ======================================
+   AICTE - TOP HEADER THEME
+   ====================================== */
+
+/* Top navigation header */
+.app-shell .topbar,
+.app-shell .top-bar,
+.app-shell .workspace-header {
+  background: #f0f5fc !important;
+  border-bottom: 1px solid #d5e1f0 !important;
+  color: #112d50 !important;
+  min-height: 76px;
+}
+
+/* Breadcrumb: Workspace / Overview */
+.app-shell .topbar a,
+.app-shell .topbar span,
+.app-shell .top-bar a,
+.app-shell .top-bar span {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Active breadcrumb */
+.app-shell .topbar strong,
+.app-shell .top-bar strong {
+  color: #12345a !important;
+  font-weight: 700;
+}
+/* ==========================================
+   AICTE - FINAL TOP HEADER THEME
+   ========================================== */
+
+/* Main header */
+.page-shell > .topbar {
+  background: #f0f5fc !important;
+  border-bottom: 1px solid #d6e3f2 !important;
+  min-height: 82px;
+  padding: 0 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(17, 45, 80, 0.04);
+}
+
+/* Breadcrumb navigation */
+.topbar .breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 15px;
+}
+
+.topbar .breadcrumbs span {
+  color: #647d99 !important;
+  font-size: 15px !important;
+}
+
+.topbar .breadcrumbs b {
+  color: #a4b8cc !important;
+  font-weight: 400;
+}
+
+.topbar .breadcrumbs strong {
+  color: #112f55 !important;
+  font-size: 16px !important;
+  font-weight: 700;
+}
+
+/* Right header actions */
+.topbar .top-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* Synthetic demo badge */
+.topbar .demo-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  background: #e4effd !important;
+  color: #155ca5 !important;
+  border: 1px solid #c9def7 !important;
+  border-radius: 24px;
+  padding: 9px 15px;
+  font-size: 14px !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.topbar .demo-chip i {
+  background: #1c67b5 !important;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+/* Notification icon */
+.topbar .notification {
+  color: #1a548e !important;
+  background: transparent;
+  border: none;
+  font-size: 20px;
+}
+
+/* Divider */
+.topbar .top-separator {
+  width: 1px;
+  height: 30px;
+  background: #d6e3f2 !important;
+}
+
+/* Profile */
+.topbar .top-account {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #17375e !important;
+  font-size: 15px !important;
+  background: transparent;
+  border: none;
+  white-space: nowrap;
+}
+
+/* Profile avatar */
+.topbar .avatar-small {
+  background: #dbe9fa !important;
+  color: #155ca5 !important;
+  font-weight: 700;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .page-shell > .topbar {
+    padding: 12px 16px;
+    min-height: 70px;
+    gap: 12px;
+  }
+
+  .topbar .top-actions {
+    gap: 10px;
+  }
+
+  .topbar .demo-chip {
+    padding: 7px 10px;
+    font-size: 12px !important;
+  }
+
+  .topbar .top-account > span:not(.avatar) {
+    display: none;
+  }
+}

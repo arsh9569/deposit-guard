@@ -1,5 +1,7 @@
 import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import './aicte-login.css';
+import './aicte-unified-theme.css';
 import { auditEvents, fdrRecords, institution } from '../features/demo-data';
 import { getDashboard, getVerificationAttempts, getVerificationInstruments, runVerificationAttempt, signIn, type DashboardResponse, type PortalUser, type VerificationAttempt, type VerificationInstrument } from '../lib/api';
 
@@ -116,10 +118,10 @@ export function App() {
       )}
       <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
         <div className="brand">
-          <span className="brand-shield">⌑</span>
+          <span className="brand-shield">✺</span>
           <span>
-            <strong>depositguard</strong>
-            <small>INSTITUTION PORTAL</small>
+            <strong>AICTE</strong>
+            <small>SECURITY DEPOSIT &amp; FDR</small>
           </span>
           <button
             className="mobile-menu-close"
@@ -243,8 +245,11 @@ export function App() {
 function Login({ onLogin, expired }: { onLogin: (user: PortalUser) => void; expired: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
@@ -258,117 +263,59 @@ function Login({ onLogin, expired }: { onLogin: (user: PortalUser) => void; expi
     }
     setBusy(true);
     try {
+      // Keep existing server-side authentication and permissions unchanged.
       const user = await signIn(email.trim(), password);
-      setBusy(false);
       onLogin(user);
-    } catch (error) {
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Sign-in failed. Try again.');
+    } finally {
       setBusy(false);
-      setError(error instanceof Error ? error.message : 'Sign-in failed. Try again.');
     }
   };
+
   return (
-    <div className="login-page">
-      <section className="login-story">
-        <div className="login-brand">
-          <span className="brand-shield">⌑</span>
-          <span>
-            <strong>depositguard</strong>
-            <small>INSTITUTION PORTAL</small>
-          </span>
+    <div className="aicte-login">
+      <section className="aicte-hero">
+        <div className="aicte-identity">
+          <span className="aicte-emblem" aria-hidden="true">✺</span>
+          <span><strong>AICTE</strong><small>All India Council for Technical Education</small></span>
         </div>
-        <div className="story-content">
-          <div className="overline">
-            AICTE PS 26265 <i /> SIH 2026
-          </div>
-          <h1>
-            Good records.
-            <br />
-            <em>Clear decisions.</em>
-          </h1>
-          <p>One place to manage institutional FDRs, supporting documents, and review workflows.</p>
-          <div className="story-points">
-            <div>
-              <span>◇</span>
-              <div>
-                <strong>Built around accountability</strong>
-                <small>Evidence, decisions, and history stay connected.</small>
-              </div>
-            </div>
-            <div>
-              <span>◷</span>
-              <div>
-                <strong>Stay ahead of key dates</strong>
-                <small>See upcoming maturities and actions in one view.</small>
-              </div>
-            </div>
-          </div>
+        <div className="aicte-hero-body">
+          <h1>Security Deposit &amp;<br />FDR Portal</h1>
+          <p>Digitally submit, verify and manage FDR records for compliance.</p>
+          <ul>
+            <li><span>▣</span> Secure document submission</li>
+            <li><span>✓</span> Automated verification support</li>
+            <li><span>▤</span> Real-time status tracking</li>
+            <li><span>◷</span> Timely alerts and reminders</li>
+          </ul>
         </div>
-        <div className="login-footnote">
-          DEPOSITGUARD AI <i /> INTERACTION PROTOTYPE
-        </div>
+        <div className="aicte-hero-footer">SECURE · TRANSPARENT · ACCOUNTABLE</div>
       </section>
-      <section className="login-work">
-        <form className="login-form" onSubmit={submit} noValidate>
-          <div className="login-mobile-brand">
-            <span className="brand-shield">⌑</span>
-            <strong>depositguard</strong>
+
+      <section className="aicte-access">
+        <form className="aicte-card" onSubmit={submit} noValidate>
+          <h2>Welcome Back</h2>
+          <p className="aicte-intro">Login to continue</p>
+          {expired && <div className="aicte-alert" role="alert">Your session expired. Sign in again to continue.</div>}
+          {error && <div className="aicte-alert" role="alert">{error}</div>}
+
+          <label htmlFor="aicte-email">Email</label>
+          <input id="aicte-email" type="email" autoComplete="username" placeholder="Enter your email" value={email} onChange={(e) => setEmail(e.target.value)} />
+
+          <label htmlFor="aicte-password">Password</label>
+          <div className="aicte-password-wrap">
+            <input id="aicte-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button type="button" className="aicte-eye" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? 'Hide' : 'Show'}</button>
           </div>
-          <div className="form-kicker">SECURE PORTAL ACCESS</div>
-          <h2>Welcome back</h2>
-          <p className="subdued">Sign in to your institution workspace.</p>
-          {expired && (
-            <div className="alert alert-warn" role="alert">
-              Your session expired. Sign in again to continue.
-            </div>
-          )}
-          {error && (
-            <div className="alert alert-error" role="alert">
-              {error}
-            </div>
-          )}
-          <label htmlFor="login-email">Email address</label>
-          <input
-            id="login-email"
-            type="email"
-            autoComplete="username"
-            placeholder="you@institution.edu"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <div className="password-label">
-            <label htmlFor="login-password">Password</label>
-            <button
-              type="button"
-              onClick={() => setError('Ask your institution administrator to reset your password.')}
-            >
-              Forgot password?
-            </button>
+
+          <div className="aicte-form-options">
+            <label className="aicte-remember"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Remember me</label>
+            <button type="button" className="aicte-link" onClick={() => setError('Ask your institution administrator to reset your password.')}>Forgot password?</button>
           </div>
-          <input
-            id="login-password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <button className="button button-primary login-submit" type="submit" disabled={busy}>
-            {busy && <span className="spinner" />}
-            {busy ? (
-              'Signing in securely…'
-            ) : (
-              <>
-                Sign in <Arrow />
-              </>
-            )}
-          </button>
-          <div className="login-note">
-            <span>◇</span> Your institution membership and permissions come from the server.
-          </div>
+          <button className="aicte-submit" type="submit" disabled={busy}>{busy ? 'Signing in securely…' : 'Login'}</button>
+          <p className="aicte-help">Don't have an account? Contact AICTE / your institution administrator.</p>
         </form>
-        <div className="login-copyright">
-          © 2026 DepositGuard AI <i /> Prototype data is fictional
-        </div>
       </section>
     </div>
   );
