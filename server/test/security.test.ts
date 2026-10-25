@@ -47,6 +47,12 @@ function makeRepository(): AuthRepository {
       return users.find((user) => String(user._id) === id) ?? null;
     },
     async updateLastLogin() {},
+    async updateDisplayName(id, displayName) {
+      const user = users.find((candidate) => String(candidate._id) === id);
+      if (!user) return null;
+      user.displayName = displayName;
+      return user;
+    },
   };
 }
 

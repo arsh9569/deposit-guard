@@ -20,6 +20,7 @@ export interface AuthRepository {
   findByEmail(email: string): Promise<AuthUser | null>;
   findById(id: string): Promise<AuthUser | null>;
   updateLastLogin(id: string, date: Date): Promise<void>;
+  updateDisplayName(id: string, displayName: string): Promise<AuthUser | null>;
 }
 
 export interface AuditWriter {

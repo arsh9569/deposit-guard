@@ -7,7 +7,8 @@ import { DocumentModel, type DocumentRecord } from '../models/documents.js';
 import { FdrModel, type FdrRecord } from '../models/fdrs.js';
 import { OcrCorrectionModel, OcrExtractionModel, type OcrCorrectionRecord, type OcrExtractionRecord } from '../models/ocr-extractions.js';
 import { fdrCreateSchema, fdrDraftSchema, fdrUpdateSchema, objectIdSchema, ocrCorrectionSchema } from '../validators/model-schemas.js';
-import { compareExtractedValues, findMissingExtractedFields, inspectDocument, isRealIsoDate, MAX_DOCUMENT_BYTES, noProviderExtractor, privateDocumentFilter, sanitizeOriginalFileName, storePrivateDocument, type DocumentExtractor } from '../services/fdr-document-processing.js';
+import { compareExtractedValues, findMissingExtractedFields, inspectDocument, isRealIsoDate, MAX_DOCUMENT_BYTES, privateDocumentFilter, sanitizeOriginalFileName, storePrivateDocument, type DocumentExtractor } from '../services/fdr-document-processing.js';
+import { tesseractDocumentExtractor } from '../services/tesseract-ocr.js';
 
 const roles = ['institution_admin', 'institution_operator'] as const;
 const fdrs = FdrModel as Model<FdrRecord>;
@@ -15,7 +16,7 @@ const documents = DocumentModel as Model<DocumentRecord>;
 const extractions = OcrExtractionModel as Model<OcrExtractionRecord>;
 const corrections = OcrCorrectionModel as Model<OcrCorrectionRecord>;
 const completeFields = ['reference', 'instrumentNumber', 'bankName', 'branchName', 'holderName', 'principalAmount', 'issueDate', 'maturityDate'];
-export function createFdrSubmissionRouter(extractor: DocumentExtractor = noProviderExtractor) {
+export function createFdrSubmissionRouter(extractor: DocumentExtractor = tesseractDocumentExtractor) {
   const router = Router({ mergeParams: true });
   router.use(express.raw({ type: ['application/pdf', 'image/jpeg', 'image/png'], limit: '25mb' }));
   router.use(requireAuthentication);
@@ -26,7 +27,17 @@ export function createFdrSubmissionRouter(extractor: DocumentExtractor = noProvi
     try {
       const parsed = fdrDraftSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: 'Invalid FDR fields', issues: parsed.error.issues }); return; }
-      const record = await fdrs.create({ ...parsed.data, institutionId: tenant(req), createdBy: req.authUser!._id, ...(parsed.data.principalAmount ? { principalAmount: Types.Decimal128.fromString(parsed.data.principalAmount) } : {}) });
+      const scope = { institutionId: tenant(req), createdBy: req.authUser!._id, submissionStatus: 'draft' as const };
+      const existingDraft = parsed.data.reference
+        ? await fdrs.findOne({ ...scope, reference: parsed.data.reference })
+        : null;
+      let record;
+      if (existingDraft) {
+        existingDraft.set({ ...parsed.data, ...(parsed.data.principalAmount ? { principalAmount: Types.Decimal128.fromString(parsed.data.principalAmount) } : {}) });
+        record = await existingDraft.save();
+      } else {
+        record = await fdrs.create({ ...parsed.data, institutionId: tenant(req), createdBy: req.authUser!._id, ...(parsed.data.principalAmount ? { principalAmount: Types.Decimal128.fromString(parsed.data.principalAmount) } : {}) });
+      }
       res.status(201).json({ id: record.id, submissionStatus: record.submissionStatus, missingFields: completeFields.filter((field) => !record.get(field)) });
     } catch (error) { next(error); }
   });
@@ -66,7 +77,7 @@ export function createFdrSubmissionRouter(extractor: DocumentExtractor = noProvi
   router.post('/drafts/:instrumentId/documents', async (req, res, next) => {
     try {
       if (!objectIdSchema.safeParse(req.params.instrumentId).success) { res.status(404).json({ error: 'Draft not found' }); return; }
-      const draft = await fdrs.findOne({ _id: req.params.instrumentId, institutionId: tenant(req), submissionStatus: 'draft' });
+      const draft = await fdrs.findOne({ _id: req.params.instrumentId, institutionId: tenant(req), createdBy: req.authUser!._id, submissionStatus: 'draft' });
       if (!draft) { res.status(404).json({ error: 'Draft not found' }); return; }
       if (!Buffer.isBuffer(req.body)) { res.status(400).json({ error: 'Send the file as the request body' }); return; }
       const mime = inspectDocument(req.body, req.header('content-type')?.split(';')[0] ?? '');
@@ -76,22 +87,33 @@ export function createFdrSubmissionRouter(extractor: DocumentExtractor = noProvi
       const document = await documents.create({ institutionId: tenant(req), instrumentId: draft._id, uploadedBy: req.authUser!._id, originalFileName: filename, storageKey: stored.storageKey, contentType: mime, byteLength: req.body.length, sha256: stored.sha256, purpose: 'fdr_instrument', malwareScanStatus: 'pending' });
       draft.documentIds.push(document._id); draft.ocrStatus = 'processing'; await draft.save();
       let fields = {} as Awaited<ReturnType<DocumentExtractor['runOcr']>>;
-      let rawResult: unknown;
+      let rawResult: unknown; let extractedText = '';
       let provider = 'text-extraction'; let status: 'complete' | 'failed' = 'complete'; let failureCode: string | undefined;
       try {
         if (mime === 'application/pdf') {
           const result = await extractor.extractPdfText(req.body);
-          if (result.text.trim()) { fields = result.fields; rawResult = result; }
-          else { fields = await extractor.runOcr(req.body, mime); rawResult = fields; }
+          if (result.text.trim()) { fields = result.fields; rawResult = result; extractedText = result.text; }
+          else if (extractor.runOcrWithText) {
+            const result = await extractor.runOcrWithText(req.body, mime);
+            fields = result.fields; rawResult = result; extractedText = result.text;
+          } else { fields = await extractor.runOcr(req.body, mime); rawResult = fields; }
           if (!result.text.trim()) provider = 'ocr';
+        } else if (extractor.runOcrWithText) {
+          const result = await extractor.runOcrWithText(req.body, mime);
+          fields = result.fields; rawResult = result; extractedText = result.text; provider = 'ocr';
         } else { fields = await extractor.runOcr(req.body, mime); rawResult = fields; provider = 'ocr'; }
       } catch { status = 'failed'; failureCode = 'extraction_unavailable'; }
       const extraction = await extractions.create({ institutionId: tenant(req), documentId: document._id, instrumentId: draft._id, provider, status, fields: Object.entries(fields).map(([fieldName, item]) => ({ fieldName, value: item!.value, confidence: item!.confidence, sourceText: item!.sourceText })), rawResult, failureCode, completedAt: new Date() });
       if (status === 'failed') draft.ocrStatus = 'failed'; else draft.ocrStatus = 'complete'; await draft.save();
-      const submitted: Record<string, string> = { reference: draft.reference, bankName: draft.bankName, principalAmount: draft.principalAmount.toString(), issueDate: new Date(draft.issueDate).toISOString().slice(0, 10), maturityDate: new Date(draft.maturityDate).toISOString().slice(0, 10) };
+      const submitted: Record<string, string> = {};
+      if (draft.reference) submitted.reference = draft.reference;
+      if (draft.bankName) submitted.bankName = draft.bankName;
+      if (draft.principalAmount) submitted.principalAmount = draft.principalAmount.toString();
+      if (draft.issueDate) submitted.issueDate = new Date(draft.issueDate).toISOString().slice(0, 10);
+      if (draft.maturityDate) submitted.maturityDate = new Date(draft.maturityDate).toISOString().slice(0, 10);
       const discrepancies = compareExtractedValues(fields, submitted);
       const missingFields = completeFields.filter((field) => !(draft as unknown as Record<string, unknown>)[field]);
-      res.status(201).json({ documentId: document.id, extractionId: extraction.id, extractionStatus: status, confidence: Object.fromEntries(Object.entries(fields).map(([key, item]) => [key, item!.confidence])), discrepancies, missingFields, missingExtractedFields: findMissingExtractedFields(fields), authenticity: 'Document extraction is not proof that an FDR is genuine.' });
+      res.status(201).json({ instrumentId: draft.id, documentId: document.id, extractionId: extraction.id, originalFileName: filename, extractionStatus: status, extractedText, fields: Object.entries(fields).map(([fieldName, item]) => ({ fieldName, value: item!.value, confidence: item!.confidence, ...(item!.sourceText ? { sourceText: item!.sourceText } : {}) })), discrepancies, missingFields, missingExtractedFields: findMissingExtractedFields(fields), authenticity: 'Document extraction is not proof that an FDR is genuine.' });
     } catch (error) { if (error instanceof Error && ['invalid_size', 'invalid_file_content', 'malformed_file'].includes(error.message)) { res.status(400).json({ error: error.message }); return; } next(error); }
   });
 

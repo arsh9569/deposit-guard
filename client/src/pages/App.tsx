@@ -1,9 +1,9 @@
-import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useState } from 'react';
+import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import './aicte-login.css';
 import './aicte-unified-theme.css';
 import { auditEvents, fdrRecords, institution } from '../features/demo-data';
-import { getDashboard, getVerificationAttempts, getVerificationInstruments, runVerificationAttempt, signIn, type DashboardResponse, type PortalUser, type VerificationAttempt, type VerificationInstrument } from '../lib/api';
+import { createFdrDraft, getCurrentUser, getDashboard, getSupportedFdrMimeType, getVerificationAttempts, getVerificationInstruments, runVerificationAttempt, saveOcrCorrection, signIn, signOut, submitFdrDraft, updateFdrDraft, updateUsername, uploadFdrForOcr, type DashboardResponse, type OcrUploadResult, type PortalUser, type VerificationAttempt, type VerificationInstrument } from '../lib/api';
 
 type Screen =
   'dashboard' | 'register' | 'ocr' | 'review' | 'verification' | 'compliance' | 'release' | 'audit';
@@ -73,30 +73,39 @@ function Tag({ children, tone = 'neutral' }: { children: ReactNode; tone?: strin
 export function App() {
   const [sessionUser, setSessionUser] = useState<PortalUser | null>(null);
   const signedIn = Boolean(sessionUser);
-  const [expired, setExpired] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState('');
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [ocrResult, setOcrResult] = useState<OcrUploadResult | null>(null);
   const activeMembership = sessionUser?.memberships[0];
   const allowedNav = nav.filter((item) => permissionsFor(activeMembership?.roles ?? []).has(item.capability));
   useEffect(() => {
-    if (!signedIn) return;
-    const timer = window.setTimeout(
-      () => {
-        setSessionUser(null);
-        setExpired(true);
-      },
-      15 * 60 * 1000,
-    );
-    return () => window.clearTimeout(timer);
-  }, [signedIn]);
+    let active = true;
+    getCurrentUser()
+      .then((user) => { if (active) setSessionUser(user); })
+      .catch((error: unknown) => {
+        if (active) setAuthError(error instanceof Error ? error.message : 'Could not restore your session.');
+      })
+      .finally(() => { if (active) setAuthLoading(false); });
+    return () => { active = false; };
+  }, []);
+  if (authLoading) return <div className="auth-loading" role="status">Restoring your session…</div>;
   if (!signedIn)
     return (
       <Login
-        expired={expired}
+        expired={false}
+        initialError={authError}
         onLogin={(user) => {
           setSessionUser(user);
-          setExpired(false);
+          setOcrResult(null);
+          setAuthError('');
           setScreen('dashboard');
         }}
       />
@@ -105,6 +114,45 @@ export function App() {
     setScreen(page);
     setMobileOpen(false);
     setToast('');
+  };
+  const toggleProfile = () => {
+    setProfileOpen((open) => !open);
+    setEditingUsername(false);
+    setProfileError('');
+  };
+  const saveUsername = async (event: FormEvent) => {
+    event.preventDefault();
+    const displayName = usernameDraft.trim();
+    if (displayName.length < 2 || displayName.length > 80) {
+      setProfileError('Username must be between 2 and 80 characters.');
+      return;
+    }
+    setProfileBusy(true);
+    setProfileError('');
+    try {
+      const updated = await updateUsername(displayName);
+      setSessionUser(updated);
+      setEditingUsername(false);
+      setToast('Username updated.');
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Username could not be updated.');
+    } finally {
+      setProfileBusy(false);
+    }
+  };
+  const handleSignOut = async () => {
+    setProfileBusy(true);
+    setProfileError('');
+    try {
+      await signOut();
+      setSessionUser(null);
+      setOcrResult(null);
+      setProfileOpen(false);
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : 'Sign out failed. Please try again.');
+    } finally {
+      setProfileBusy(false);
+    }
   };
   const title = nav.find((item) => item.id === screen)?.label ?? 'Overview';
   return (
@@ -131,14 +179,14 @@ export function App() {
             ×
           </button>
         </div>
-        <button className="institution-select">
+        <div className="institution-select">
           <span className="institution-monogram">I</span>
           <span>
             <strong>Your institution</strong>
             <small>Institution workspace</small>
           </span>
           <b>⌄</b>
-        </button>
+        </div>
         <div className="nav-caption">WORKSPACE</div>
         <nav aria-label="Main navigation">
           {allowedNav.map((item) => (
@@ -162,7 +210,7 @@ export function App() {
             Open help center <Arrow />
           </button>
         </div>
-        <button className="sidebar-user" onClick={() => setSessionUser(null)} title="Sign out">
+        <button className="sidebar-user" onClick={toggleProfile} title="Open profile" aria-haspopup="dialog" aria-expanded={profileOpen}>
           <span className="avatar">{sessionUser?.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
           <span>
             <strong>{sessionUser?.displayName}</strong>
@@ -187,7 +235,7 @@ export function App() {
           </div>
           <div className="top-actions">
             <span className="demo-chip">
-              <i /> Synthetic demo
+              <i /> 24-record synthetic demo
             </span>
             <button
               className="notification"
@@ -197,12 +245,35 @@ export function App() {
               ♧<i />
             </button>
             <span className="top-separator" />
-            <button className="top-account" onClick={() => setSessionUser(null)}>
+            <button className="top-account" onClick={toggleProfile} aria-haspopup="dialog" aria-expanded={profileOpen}>
               <span className="avatar avatar-small">{sessionUser?.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
               <span>{sessionUser?.displayName}</span>
               <b>⌄</b>
             </button>
           </div>
+          {profileOpen && (
+            <section className="profile-menu" role="dialog" aria-label="Profile settings">
+              <div className="profile-menu-heading">
+                <strong>Profile</strong>
+                <button type="button" onClick={() => setProfileOpen(false)} aria-label="Close profile">×</button>
+              </div>
+              <p className="profile-email">{sessionUser!.email}</p>
+              {editingUsername ? (
+                <form onSubmit={saveUsername} className="profile-form">
+                  <label htmlFor="profile-username">Username</label>
+                  <input id="profile-username" autoFocus maxLength={80} value={usernameDraft} onChange={(event) => setUsernameDraft(event.target.value)} />
+                  <div className="profile-actions">
+                    <button type="button" onClick={() => setEditingUsername(false)} disabled={profileBusy}>Cancel</button>
+                    <button type="submit" disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save username'}</button>
+                  </div>
+                </form>
+              ) : (
+                <button className="profile-action" type="button" onClick={() => { setUsernameDraft(sessionUser!.displayName); setEditingUsername(true); }}>Change username</button>
+              )}
+              {profileError && <p className="profile-error" role="alert">{profileError}</p>}
+              <button className="profile-signout" type="button" onClick={handleSignOut} disabled={profileBusy}>{profileBusy ? 'Please wait…' : 'Sign out'}</button>
+            </section>
+          )}
         </header>
         <main className="content">
           {toast && (
@@ -214,17 +285,32 @@ export function App() {
               </button>
             </div>
           )}
-          {screen === 'dashboard' && activeMembership && <Dashboard go={go} institutionId={activeMembership.institutionId} onSessionExpired={() => setSessionUser(null)} />}
+          {screen === 'dashboard' && activeMembership && <Dashboard go={go} institutionId={activeMembership.institutionId} displayName={sessionUser.displayName} canCreateFdr={permissionsFor(activeMembership.roles).has('instruments:create')} onSessionExpired={() => { setSessionUser(null); setOcrResult(null); }} />}
           {screen === 'dashboard' && !activeMembership && <div className="dashboard-state state-denied" role="alert"><strong>No institution access</strong><p>Your account has no active institution membership.</p></div>}
-          {screen === 'register' && (
+          {screen === 'register' && !permissionsFor(activeMembership?.roles ?? []).has('instruments:create') && (
+            <div className="dashboard-state state-denied" role="alert">
+              <strong>FDR registration access required</strong>
+              <p>Your institution account does not have permission to create FDR records. Ask an institution administrator to assign the institution operator role.</p>
+              <Button kind="secondary" onClick={() => setScreen('dashboard')}>Return to overview</Button>
+            </div>
+          )}
+          {screen === 'register' && permissionsFor(activeMembership?.roles ?? []).has('instruments:create') && (
             <Registration
+              institutionId={activeMembership?.institutionId ?? ''}
+              onExtracted={(result) => {
+                setOcrResult(result);
+                setScreen('ocr');
+                setToast(result.extractionStatus === 'complete' ? 'Document uploaded and text extraction completed.' : 'Document uploaded, but automatic text extraction failed. Review the file and enter any missing fields manually.');
+              }}
               onDone={(message) => {
                 setToast(message);
                 setScreen('dashboard');
               }}
             />
           )}
-          {screen === 'ocr' && <OcrReview onDone={setToast} />}
+          {screen === 'ocr' && (ocrResult
+            ? <UploadedOcrReview result={ocrResult} institutionId={activeMembership?.institutionId ?? ''} onDone={setToast} onBack={() => setScreen('register')} />
+            : <OcrReview onDone={setToast} />)}
           {screen === 'review' && <ReviewConsole onDone={setToast} />}
           {screen === 'verification' && activeMembership && <Verification institutionId={activeMembership.institutionId} roles={activeMembership.roles} />}
           {screen === 'compliance' && <Compliance go={go} />}
@@ -242,7 +328,7 @@ export function App() {
   );
 }
 
-function Login({ onLogin, expired }: { onLogin: (user: PortalUser) => void; expired: boolean }) {
+function Login({ onLogin, expired, initialError = '' }: { onLogin: (user: PortalUser) => void; expired: boolean; initialError?: string }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -297,7 +383,7 @@ function Login({ onLogin, expired }: { onLogin: (user: PortalUser) => void; expi
         <form className="aicte-card" onSubmit={submit} noValidate>
           <h2>Welcome Back</h2>
           <p className="aicte-intro">Login to continue</p>
-          {expired && <div className="aicte-alert" role="alert">Your session expired. Sign in again to continue.</div>}
+          {(expired || initialError) && <div className="aicte-alert" role="alert">{initialError || 'Your session expired. Sign in again to continue.'}</div>}
           {error && <div className="aicte-alert" role="alert">{error}</div>}
 
           <label htmlFor="aicte-email">Email</label>
@@ -369,7 +455,7 @@ function SectionTag({ children }: { children: ReactNode }) {
   return <span className="section-tag">{children}</span>;
 }
 
-function Dashboard({ go, institutionId, onSessionExpired }: { go: (page: Screen) => void; institutionId: string; onSessionExpired: () => void }) {
+function Dashboard({ go, institutionId, displayName, canCreateFdr, onSessionExpired }: { go: (page: Screen) => void; institutionId: string; displayName: string; canCreateFdr: boolean; onSessionExpired: () => void }) {
   const [data, setData] = useState<DashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; denied: boolean } | null>(null);
@@ -397,9 +483,9 @@ function Dashboard({ go, institutionId, onSessionExpired }: { go: (page: Screen)
     <>
       <PageTitle
         overline={dateLabel}
-        title={`Good afternoon, ${data?.displayName ?? 'there'}`}
+        title={`Good afternoon, ${displayName || data?.displayName || 'there'}`}
         description="Live figures from your institution’s DepositGuard records."
-        action={<Button onClick={() => go('register')}>＋ &nbsp;Register an FDR</Button>}
+        action={canCreateFdr ? <Button onClick={() => go('register')}>＋ &nbsp;Register an FDR</Button> : undefined}
       />
       {error && <div className={`dashboard-state ${error.denied ? 'state-denied' : 'state-error'}`} role="alert">
         <strong>{error.message.startsWith('Your session expired') ? 'Session expired' : error.denied ? 'Dashboard access denied' : 'Dashboard unavailable'}</strong><p>{error.message}</p>
@@ -417,7 +503,7 @@ function Dashboard({ go, institutionId, onSessionExpired }: { go: (page: Screen)
           </button>
         ))}
       </div>
-      {!loading && !error && counts?.totalFdrs === 0 && <div className="dashboard-state dashboard-empty"><strong>No FDR records yet</strong><p>This institution has no instruments in the API response.</p><Button onClick={() => go('register')}>Register an FDR</Button></div>}
+      {!loading && !error && counts?.totalFdrs === 0 && <div className="dashboard-state dashboard-empty"><strong>No FDR records yet</strong><p>This institution has no instruments in the API response.</p>{canCreateFdr && <Button onClick={() => go('register')}>Register an FDR</Button>}</div>}
       <div className="dashboard-columns">
         <Panel className="action-panel">
           <PanelHeading
@@ -496,14 +582,14 @@ function Dashboard({ go, institutionId, onSessionExpired }: { go: (page: Screen)
         <div>
           <SectionTag>QUICK ACTIONS</SectionTag>
         </div>
-        <button onClick={() => go('register')}>
+        {canCreateFdr && <button onClick={() => go('register')}>
           <i className="shortcut-icon mint">＋</i>
           <span>
             <strong>Register an FDR</strong>
             <small>Add a deposit instrument</small>
           </span>
           <Arrow />
-        </button>
+        </button>}
         <button onClick={() => go('ocr')}>
           <i className="shortcut-icon lilac">⌗</i>
           <span>
@@ -525,39 +611,81 @@ function Dashboard({ go, institutionId, onSessionExpired }: { go: (page: Screen)
   );
 }
 
-function Registration({ onDone }: { onDone: (message: string) => void }) {
+function Registration({ institutionId, onDone, onExtracted }: { institutionId: string; onDone: (message: string) => void; onExtracted: (result: OcrUploadResult) => void }) {
+  const formRef = useRef<HTMLFormElement>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [draftId, setDraftId] = useState('');
   const [draft, setDraft] = useState(false);
   const [message, setMessage] = useState('');
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<'draft' | 'upload' | null>(null);
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!event.currentTarget.reportValidity()) return;
-    const dates = [...event.currentTarget.querySelectorAll<HTMLInputElement>('input[type="date"]')];
-    const issueDate = dates[0]?.value;
-    const maturityDate = dates[1]?.value;
-    const validityDate = dates[2]?.value;
-    if (!issueDate || !maturityDate || maturityDate <= issueDate || (validityDate && validityDate < maturityDate)) {
+    const submitted = readFdrForm(event.currentTarget);
+    const { issueDate, maturityDate, validUntil: validityDate } = submitted;
+    if ((issueDate && maturityDate && maturityDate <= issueDate) || (validityDate && maturityDate && validityDate < maturityDate)) {
       setDraft(false);
       setMessage('Check that maturity follows the issue date and validity does not end before maturity.');
       return;
     }
-    if (file && (!['application/pdf', 'image/jpeg', 'image/png'].includes(file.type) || file.size > 25 * 1024 * 1024)) {
+    if (file && (!getSupportedFdrMimeType(file) || file.size > 25 * 1024 * 1024)) {
       setDraft(false);
       setMessage('Choose a PDF, JPEG, or PNG file up to 25 MiB.');
       return;
     }
+    if (!file) {
+      setDraft(false);
+      setMessage('Attach a PDF, JPEG, or PNG document to run text extraction.');
+      return;
+    }
+    if (!institutionId) {
+      setDraft(false);
+      setMessage('Your account has no active institution for document submission.');
+      return;
+    }
+    setBusy(true);
+    setBusyAction('upload');
     setDraft(false);
-    setMessage(
-      file
-        ? 'Ready to submit with supporting document.'
-        : 'Please attach the supporting FDR document.',
-    );
-    if (file)
-      window.setTimeout(() => onDone('FDR submission added to the synthetic review queue.'), 500);
+    setMessage('Uploading document and extracting text…');
+    try {
+      const result = await uploadFdrForOcr(institutionId, file, { ...submitted, draftId: draftId || undefined });
+      onExtracted(result);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Document upload or extraction failed.');
+    } finally {
+      setBusy(false);
+      setBusyAction(null);
+    }
   };
-  const saveDraft = () => {
-    setDraft(true);
-    setMessage('Draft saved locally for this demo session.');
+  const saveDraft = async () => {
+    if (!institutionId) { setMessage('Your account has no active institution for saving this draft.'); return; }
+    const form = formRef.current;
+    if (!form) { setMessage('The FDR form is unavailable. Refresh the page and try again.'); return; }
+    const values = readFdrForm(form);
+    if ((values.issueDate && values.maturityDate && values.maturityDate <= values.issueDate) || (values.validUntil && values.maturityDate && values.validUntil < values.maturityDate)) {
+      setDraft(false);
+      setMessage('Check that maturity follows the issue date and validity does not end before maturity.');
+      return;
+    }
+    setBusy(true);
+    setBusyAction('draft');
+    setDraft(false);
+    setMessage('Saving draft to your account…');
+    try {
+      if (draftId) {
+        const changedValues = Object.fromEntries(Object.entries(values).filter(([, value]) => value.trim()));
+        if (Object.keys(changedValues).length) await updateFdrDraft(institutionId, draftId, changedValues);
+      } else {
+        setDraftId(await createFdrDraft(institutionId, values));
+      }
+      setDraft(true);
+      setMessage('Draft saved to your account. Upload a document when you are ready to continue.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'FDR draft could not be saved.');
+    } finally {
+      setBusy(false);
+      setBusyAction(null);
+    }
   };
   return (
     <>
@@ -571,8 +699,7 @@ function Registration({ onDone }: { onDone: (message: string) => void }) {
           </button>
         }
       />
-      {message && <div className={`inline-message ${draft ? 'message-ok' : ''}`}>{message}</div>}
-      <form className="registration-grid" onSubmit={submit}>
+      <form ref={formRef} className="registration-grid" noValidate onSubmit={submit} onChange={() => { setDraft(false); if (message) setMessage(''); }}>
         <div className="form-stack">
           <Panel>
             <PanelHeading
@@ -586,44 +713,44 @@ function Registration({ onDone }: { onDone: (message: string) => void }) {
                 </select>
               </Field>
               <Field label="Internal reference" required>
-                <input required placeholder="e.g. FIN-FDR-2026-014" />
+                <input required name="reference" placeholder="e.g. FIN-FDR-2026-014" />
               </Field>
             </div>
           </Panel>
           <Panel>
             <PanelHeading
               title="Bank & instrument details"
-              detail="Enter details exactly as shown on the original FDR."
+              detail="Enter known details now or extract text first and complete missing values during review."
             />
             <div className="fields-grid">
               <Field label="Bank name" required>
-                <input required placeholder="e.g. State Bank of India" />
+                <input required name="bankName" placeholder="e.g. Northstar Synthetic Bank" />
               </Field>
               <Field label="Branch" required>
-                <input required placeholder="Branch or location" />
+                <input required name="branchName" placeholder="Branch or location" />
               </Field>
               <Field label="FDR / instrument number" required>
-                <input required placeholder="Enter instrument reference" />
+                <input required name="instrumentNumber" placeholder="Enter instrument reference" />
               </Field>
               <Field label="Account holder" required>
-                <input required placeholder="Institution account name" />
+                <input required name="holderName" placeholder="Synthetic institution name only" />
               </Field>
               <Field label="Deposit amount (₹)" required>
-                <input type="number" required min="1" placeholder="e.g. 2500000" />
+                <input type="number" name="principalAmount" required min="1" placeholder="e.g. 2500000" />
               </Field>
               <Field label="Currency">
-                <select>
-                  <option>INR · Indian Rupee</option>
+                <select name="currency" defaultValue="INR">
+                  <option value="INR">INR · Indian Rupee</option>
                 </select>
               </Field>
               <Field label="Issue date" required>
-                <input type="date" required />
+                <input type="date" name="issueDate" required />
               </Field>
               <Field label="Maturity date" required>
-                <input type="date" required />
+                <input type="date" name="maturityDate" required />
               </Field>
               <Field label="Validity through">
-                <input type="date" />
+                <input type="date" name="validUntil" />
               </Field>
             </div>
             <small className="field-note">
@@ -634,7 +761,7 @@ function Registration({ onDone }: { onDone: (message: string) => void }) {
           <Panel>
             <PanelHeading
               title="Supporting document"
-              detail="Select a scan or PDF of the original FDR for this demo record."
+              detail="Use a clearly synthetic sample document only. Do not select real financial documents or personal information."
             />
             <label className={`upload-well ${file ? 'upload-done' : ''}`}>
               <input
@@ -644,7 +771,7 @@ function Registration({ onDone }: { onDone: (message: string) => void }) {
               />
               <span>{file ? '✓' : '↥'}</span>
               <strong>{file?.name || 'Drop your document here, or browse'}</strong>
-              <small>PDF or image · selection stays in this browser · no file is uploaded</small>
+              <small>Synthetic sample only · file is uploaded securely for text extraction · PDF, JPEG or PNG up to 25 MiB</small>
             </label>
           </Panel>
         </div>
@@ -654,7 +781,7 @@ function Registration({ onDone }: { onDone: (message: string) => void }) {
             <h3>Before you submit</h3>
             <ul>
               <li>Check the instrument reference and deposit amount.</li>
-              <li>Confirm dates against the original FDR.</li>
+              <li>Use dates shown on the synthetic sample fixture.</li>
               <li>Attach a clear supporting document.</li>
             </ul>
             <div className="next-step">
@@ -665,18 +792,36 @@ function Registration({ onDone }: { onDone: (message: string) => void }) {
               </span>
             </div>
             <div className="form-buttons">
-              <Button kind="secondary" onClick={saveDraft}>
-                Save draft
+              <Button kind="secondary" type="button" onClick={() => void saveDraft()} disabled={busy}>
+                {busyAction === 'draft' ? 'Saving draft…' : 'Save draft'}
               </Button>
-              <Button type="submit">
-                Submit for review <Arrow />
+              <Button type="submit" disabled={busy}>
+                {busyAction === 'upload' ? 'Uploading & extracting…' : <>Upload &amp; extract text <Arrow /></>}
               </Button>
+              {message && <div className={`inline-message ${draft ? 'message-ok' : ''}`} role={draft ? 'status' : 'alert'} aria-live="polite">{message}</div>}
             </div>
           </Panel>
         </aside>
       </form>
     </>
   );
+}
+
+function readFdrForm(form: HTMLFormElement) {
+  const values = new FormData(form);
+  const value = (name: string) => String(values.get(name) ?? '');
+  return {
+    reference: value('reference'),
+    instrumentNumber: value('instrumentNumber'),
+    bankName: value('bankName'),
+    branchName: value('branchName'),
+    holderName: value('holderName'),
+    principalAmount: value('principalAmount'),
+    currency: value('currency') || 'INR',
+    issueDate: value('issueDate'),
+    maturityDate: value('maturityDate'),
+    validUntil: value('validUntil'),
+  };
 }
 
 function Field({
@@ -708,6 +853,121 @@ function Field({
   );
 }
 
+function UploadedOcrReview({ result, institutionId, onDone, onBack }: { result: OcrUploadResult; institutionId: string; onDone: (message: string) => void; onBack: () => void }) {
+  const keys = ['reference', 'instrumentNumber', 'bankName', 'branchName', 'holderName', 'principalAmount', 'issueDate', 'maturityDate'] as const;
+  const labels: Record<(typeof keys)[number], string> = { reference: 'FDR reference', instrumentNumber: 'Instrument number', bankName: 'Bank name', branchName: 'Branch', holderName: 'Account holder', principalAmount: 'Deposit amount', issueDate: 'Issue date', maturityDate: 'Maturity date' };
+  const submitted: Record<(typeof keys)[number], string> = {
+    reference: result.submitted.reference,
+    instrumentNumber: result.submitted.instrumentNumber,
+    bankName: result.submitted.bankName,
+    branchName: result.submitted.branchName,
+    holderName: result.submitted.holderName,
+    principalAmount: result.submitted.principalAmount,
+    issueDate: result.submitted.issueDate,
+    maturityDate: result.submitted.maturityDate,
+  };
+  const extractedRaw = Object.fromEntries(result.fields.map((field) => [field.fieldName, field.value])) as Partial<Record<(typeof keys)[number], string>>;
+  const extracted = Object.fromEntries(keys.map((key) => [key, extractedRaw[key] === undefined ? undefined : normalizeOcrDate(extractedRaw[key]!)])) as Partial<Record<(typeof keys)[number], string>>;
+  const [values, setValues] = useState<Record<(typeof keys)[number], string>>(() => Object.fromEntries(keys.map((key) => [key, extracted[key] ?? submitted[key]])) as Record<(typeof keys)[number], string>);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [submittedForReview, setSubmittedForReview] = useState(false);
+  const [savedValues, setSavedValues] = useState<Partial<Record<(typeof keys)[number], string>>>({});
+  const rows = keys.map((key) => {
+    const field = result.fields.find((item) => item.fieldName === key);
+    return { key, label: labels[key], value: submitted[key], confidence: field ? Math.round(field.confidence * 100) : 0, mismatch: result.discrepancies.includes(key) };
+  });
+  const changed = keys.filter((key) => values[key] !== (extracted[key] ?? submitted[key]) && values[key] !== savedValues[key]);
+  const update = (key: (typeof keys)[number], value: string) => {
+    setValues((current) => ({ ...current, [key]: value }));
+    setSaved(false);
+  };
+  const save = async (submit = false) => {
+    const requiredFields: (typeof keys)[number][] = ['reference', 'instrumentNumber', 'bankName', 'branchName', 'holderName', 'principalAmount', 'issueDate', 'maturityDate'];
+    const amount = values.principalAmount.replace(/,/g, '');
+    if (submit && requiredFields.some((key) => !values[key].trim())) {
+      onDone('Complete all required FDR fields before submitting for official review.');
+      return;
+    }
+    if ((values.principalAmount && (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0)) || (submit && (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0 || !isValidOcrDate(normalizeOcrDate(values.issueDate)) || !isValidOcrDate(normalizeOcrDate(values.maturityDate)) || normalizeOcrDate(values.maturityDate) <= normalizeOcrDate(values.issueDate)))) {
+      onDone('Enter a positive amount and valid dates, with maturity after issue date.');
+      return;
+    }
+    setBusy(true);
+    try {
+      for (const key of changed) {
+        let correctedValue = values[key].trim();
+        if (key === 'principalAmount') correctedValue = correctedValue.replace(/,/g, '');
+        if (key === 'issueDate' || key === 'maturityDate') correctedValue = normalizeOcrDate(correctedValue);
+        if (extractedRaw[key] !== undefined) await saveOcrCorrection(institutionId, result, key, correctedValue);
+        else await updateFdrDraft(institutionId, result.instrumentId, { [key]: correctedValue });
+        setSavedValues((current) => ({ ...current, [key]: values[key] }));
+      }
+      if (submit) {
+        await submitFdrDraft(institutionId, result.instrumentId);
+        setSubmittedForReview(true);
+      }
+      setSaved(true);
+      onDone(submit
+        ? 'Corrections saved and the FDR draft submitted for official review.'
+        : changed.length ? 'Corrections saved to the server. Original extracted values remain preserved.' : 'No corrections were needed. The extracted results are already preserved.');
+    } catch (error) {
+      onDone(error instanceof Error ? error.message : 'OCR corrections could not be saved.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <PageTitle
+        overline="DOCUMENT WORKSPACE · UPLOADED FILE"
+        title="Review extracted text"
+        description="Text extracted by the server from your uploaded document. Review recognized fields before submitting."
+        action={<Tag tone={submittedForReview ? 'green' : result.extractionStatus === 'complete' ? 'blue' : 'red'}>{submittedForReview ? 'Submitted for review' : result.extractionStatus === 'complete' ? 'Extraction complete' : 'Extraction failed'}</Tag>}
+      />
+      <div className="workspace-toolbar">
+        <button className="inline-link" onClick={onBack}>← Back to registration</button>
+        <span>{result.originalFileName} · {result.extractedText.length.toLocaleString()} characters extracted</span>
+      </div>
+      {result.extractionStatus === 'failed' && <div className="dashboard-state state-error" role="alert">The file was uploaded, but the server could not read its text. Try a clear, upright PDF, JPEG, or PNG, or enter the FDR details below for manual review.</div>}
+      <div className="ocr-grid">
+        <Panel className="preview-panel">
+          <div className="preview-header"><span className="file-icon">▤</span><span><strong>{result.originalFileName}</strong><small>{result.authenticity}</small></span></div>
+          <div className="ocr-text-preview"><pre>{result.extractedText || 'No text was found in this document.'}</pre></div>
+        </Panel>
+        <Panel className="extraction-panel">
+          <div className="extraction-header"><div><h2>Recognized fields</h2><p>Compare extracted values with your submitted details.</p></div><Tag tone="blue">{result.fields.length} found</Tag></div>
+          {result.fields.length === 0 && <div className="dashboard-state">No supported FDR fields were recognized. Check the raw extracted text and review the submitted values.</div>}
+          <>
+            <div className="extract-columns"><span>FIELD</span><span>EXTRACTED VALUE</span><span>SUBMITTED VALUE</span></div>
+            {rows.map((row) => <div className={`extract-row ${row.mismatch ? 'extract-mismatch' : ''}`} key={row.key}>
+              <span className="extract-field">{row.label}{row.mismatch && <small>⚠ Check</small>}</span>
+              <span className="extract-edit"><input aria-label={`Extracted ${row.label}`} value={values[row.key]} onChange={(event) => update(row.key, event.target.value)} /><b className={row.confidence < 80 ? 'low-confidence' : ''}>{row.confidence ? `${row.confidence}%` : 'Enter value'}</b>{changed.includes(row.key) && <i>Edited</i>}</span>
+              <span className="extract-submitted">{row.value}</span>
+            </div>)}
+          </>
+          <div className="preserve-note"><span>◇</span><span><strong>Original extraction preserved</strong><small>{saved ? 'Corrections saved to server.' : `${changed.length} unsaved correction${changed.length === 1 ? '' : 's'}. `}Extraction is not proof that a financial instrument is genuine.</small></span></div>
+          <div className="ocr-actions">
+            <Button kind="secondary" onClick={() => void save()} disabled={busy || saved}>{busy ? 'Saving…' : saved ? 'Corrections saved ✓' : 'Save corrections'}</Button>
+            <Button onClick={() => void save(true)} disabled={busy || submittedForReview}>{busy ? 'Saving…' : submittedForReview ? 'Submitted ✓' : <>Save &amp; submit <Arrow /></>}</Button>
+          </div>
+        </Panel>
+      </div>
+    </>
+  );
+}
+
+function normalizeOcrDate(value: string) {
+  const match = value.match(/^(\d{2})[/-](\d{2})[/-](\d{4})$/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : value;
+}
+
+function isValidOcrDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 function OcrReview({ onDone }: { onDone: (message: string) => void }) {
   const record = fdrRecords[0];
   const original = {
@@ -719,7 +979,7 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
     maturity: record.maturityDate,
   };
   const extraction = { ...original, amount: '2450000', maturity: record.maturityDate };
-  const [values, setValues] = useState(() => {
+  const [values, setValues] = useState<typeof original>(() => {
     try {
       const stored = sessionStorage.getItem(OCR_STORAGE_KEY);
       return stored ? { ...extraction, ...JSON.parse(stored).values } : extraction;
@@ -735,16 +995,13 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
       return new Set<string>();
     }
   });
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(
-        OCR_STORAGE_KEY,
-        JSON.stringify({ values, correctedFields: [...changed] }),
-      );
-    } catch {
-      // Keep the correction layer in memory if session storage is unavailable.
-    }
-  }, [values, changed]);
+  const [saved, setSaved] = useState(() => {
+    try { return Boolean(sessionStorage.getItem(OCR_STORAGE_KEY)); } catch { return false; }
+  });
+  const [submitted, setSubmitted] = useState(() => {
+    try { return Boolean(JSON.parse(sessionStorage.getItem(OCR_STORAGE_KEY) ?? '{}').submitted); } catch { return false; }
+  });
+  const [storageWarning, setStorageWarning] = useState(false);
   const rows: {
     key: keyof typeof original;
     label: string;
@@ -765,8 +1022,59 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
     },
   ];
   const change = (key: keyof typeof original, value: string) => {
-    setValues({ ...values, [key]: value });
-    setChanged(new Set(changed).add(key));
+    setValues((current) => ({ ...current, [key]: value }));
+    setChanged((current) => {
+      const next = new Set(current);
+      if (value === extraction[key]) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setSaved(false);
+    setSubmitted(false);
+  };
+  const saveReview = (submit = false) => {
+    if (rows.some((row) => !values[row.key].trim()) || !/^\d+(?:\.\d{1,2})?$/.test(values.amount) || Number(values.amount) <= 0) {
+      onDone('Complete all extracted fields and enter a valid positive deposit amount before saving.');
+      return;
+    }
+    try {
+      sessionStorage.setItem(OCR_STORAGE_KEY, JSON.stringify({ values, correctedFields: [...changed], submitted: submit }));
+      setStorageWarning(false);
+    } catch {
+      setStorageWarning(true);
+    }
+    setSaved(true);
+    setSubmitted(submit);
+    onDone(submit
+      ? 'Corrected values saved and marked submitted in this synthetic demo session.'
+      : 'OCR corrections saved for this browser session. The original extraction remains preserved.');
+  };
+  const resetReview = () => {
+    setValues(extraction);
+    setChanged(new Set());
+    setSaved(false);
+    setSubmitted(false);
+    setStorageWarning(false);
+    try { sessionStorage.removeItem(OCR_STORAGE_KEY); } catch { /* Reset remains available in memory. */ }
+    onDone('OCR review reset to the original synthetic extraction.');
+  };
+  const downloadSyntheticPreview = () => {
+    const contents = [
+      'SYNTHETIC DEMO ONLY — NOT A FINANCIAL DOCUMENT',
+      `FDR Reference: ${record.reference}`,
+      `Bank Name: ${record.bank}`,
+      `Account Holder: ${record.holder}`,
+      `Principal Amount: INR ${values.amount}`,
+      `Issue Date: ${record.issueDate}`,
+      `Maturity Date: ${record.maturityDate}`,
+      'FICTIONAL SAMPLE — FOR DEMONSTRATION ONLY',
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([contents], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'synthetic-fdr-ocr-preview.txt';
+    link.click();
+    URL.revokeObjectURL(url);
   };
   return (
     <>
@@ -774,7 +1082,7 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
         overline="DOCUMENT WORKSPACE · PRETESTED FIXTURE"
         title="Review extracted details"
         description="Compare OCR observations with the submitted values. Corrections are saved separately from the original extraction."
-        action={<Tag tone="blue">OCR complete</Tag>}
+        action={<Tag tone={submitted ? 'green' : 'blue'}>{submitted ? 'Submitted for review' : 'OCR complete · synthetic fixture'}</Tag>}
       />
       <div className="workspace-toolbar">
         <button className="inline-link" onClick={() => onDone('Returned to the document queue.')}>
@@ -792,17 +1100,17 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
               <strong>fdr_scan_018.pdf</strong>
               <small>2 pages · 1.8 MB</small>
             </span>
-            <button aria-label="Download document">↓</button>
+            <button aria-label="Download synthetic text preview" onClick={downloadSyntheticPreview}>↓</button>
           </div>
           <div className="paper-wrap">
             <div className="fake-paper">
               <div className="paper-heading">
-                <b className="paper-seal">SB</b>
+                <b className="paper-seal">ND</b>
                 <span>
-                  <strong>STATE BANK OF INDIA</strong>
-                  <small>TERM DEPOSIT RECEIPT</small>
+                  <strong>NORTHSTAR SYNTHETIC BANK</strong>
+                  <small>SYNTHETIC DEMO · NOT A FINANCIAL DOCUMENT</small>
                 </span>
-                <small>CUSTOMER COPY</small>
+                <small>DEMO COPY</small>
               </div>
               <hr />
               <div className="paper-number">
@@ -815,7 +1123,7 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
                 <PaperLine label="Principal amount" value="₹24,50,000" warning />
                 <PaperLine label="Date of deposit" value={record.issueDate} />
                 <PaperLine label="Date of maturity" value={record.maturityDate} />
-                <PaperLine label="Branch" value="Bengaluru Main Branch" />
+                <PaperLine label="Branch" value="Synthetic Demo Branch" />
                 <PaperLine label="Interest type" value="Cumulative · Quarterly" />
               </div>
               <div className="paper-stamp">FICTIONAL SAMPLE · FOR DEMONSTRATION ONLY</div>
@@ -871,25 +1179,24 @@ function OcrReview({ onDone }: { onDone: (message: string) => void }) {
               <strong>Original extraction preserved</strong>
               <small>
                 {changed.size
-                  ? `${changed.size} correction${changed.size === 1 ? '' : 's'} recorded in this demo session. `
+                  ? `${changed.size} unsaved correction${changed.size === 1 ? '' : 's'}. `
                   : ''}
-                Original OCR values and confidence scores are retained separately.
+                Original OCR values and confidence scores are retained separately. {saved ? (submitted ? 'Submitted for synthetic review.' : 'Corrections saved.') : 'Save your changes to keep them for this browser session.'}
+                {storageWarning && ' Browser storage is unavailable; changes remain only until you leave this page.'}
               </small>
             </span>
           </div>
           <div className="ocr-actions">
+            <Button kind="quiet" onClick={resetReview}>Reset</Button>
             <Button
               kind="secondary"
-              onClick={() =>
-                onDone(
-                  `${changed.size} correction${changed.size === 1 ? '' : 's'} saved in this demo session. Original OCR values are preserved.`,
-                )
-              }
+              onClick={() => saveReview()}
+              disabled={saved && !submitted}
             >
-              Save corrections
+              {saved && !submitted ? 'Corrections saved ✓' : 'Save corrections'}
             </Button>
-            <Button onClick={() => onDone('Corrected values submitted for official scrutiny.')}>
-              Save &amp; submit <Arrow />
+            <Button onClick={() => saveReview(true)} disabled={submitted}>
+              {submitted ? 'Submitted ✓' : <>Save &amp; submit <Arrow /></>}
             </Button>
           </div>
         </Panel>
@@ -950,7 +1257,7 @@ function ReviewConsole({ onDone }: { onDone: (message: string) => void }) {
                 {item.bank} · {item.amountLabel}
               </span>
               <footer>
-                <span className="avatar avatar-tiny">AM</span> Submitted by Aarav Mehta <Arrow />
+                <span className="avatar avatar-tiny">DO</span> Submitted by Demo Institution Operator <Arrow />
               </footer>
             </button>
           ))}
@@ -1007,7 +1314,7 @@ function ReviewConsole({ onDone }: { onDone: (message: string) => void }) {
               <span>▤</span>
               <div>
                 <strong>FDR scan · customer-copy.pdf</strong>
-                <small>PDF · uploaded by Aarav Mehta · OCR complete</small>
+                <small>Synthetic PDF · uploaded by Demo Institution Operator · OCR complete</small>
               </div>
               <button onClick={() => onDone('Opened the fictional supporting-document preview.')}>
                 View document <Arrow />
@@ -1127,6 +1434,11 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
   const [reminders, setReminders] = useState(true);
   const [lead, setLead] = useState(30);
   const [saved, setSaved] = useState(false);
+  const [scheduleFilter, setScheduleFilter] = useState('All instruments');
+  const visibleRecords = fdrRecords.filter((record) =>
+    scheduleFilter === 'All instruments' ||
+    (scheduleFilter === 'Upcoming' ? record.daysToMaturity >= 0 : record.daysToMaturity < 0),
+  );
   return (
     <>
       <PageTitle
@@ -1178,7 +1490,7 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
             title="Upcoming & overdue actions"
             detail="Sorted by nearest maturity"
             action={
-              <select aria-label="Filter schedule">
+              <select aria-label="Filter schedule" value={scheduleFilter} onChange={(event) => setScheduleFilter(event.target.value)}>
                 <option>All instruments</option>
                 <option>Upcoming</option>
                 <option>Overdue</option>
@@ -1197,7 +1509,7 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
                 </tr>
               </thead>
               <tbody>
-                {fdrRecords.map((record) => (
+                {visibleRecords.map((record) => (
                   <tr key={record.reference}>
                     <td>
                       <strong>{record.reference}</strong>
@@ -1228,6 +1540,7 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
                     </td>
                   </tr>
                 ))}
+                {visibleRecords.length === 0 && <tr><td className="no-results" colSpan={5}>No instruments in this category.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1402,7 +1715,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
           <PanelHeading
             title="Request queue"
             detail="Institution release and refund requests"
-            action={<Tag tone="gold">1 active</Tag>}
+            action={<Tag tone="gold">3 seeded</Tag>}
           />
           <div className="request-card">
             <div className="request-heading">
@@ -1437,7 +1750,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
               </div>
               <div>
                 <small>Requestor</small>
-                <strong>Aarav Mehta</strong>
+                <strong>Demo Institution Operator</strong>
               </div>
             </div>
             <div className="supporting-file">
@@ -1475,7 +1788,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
                 <i className="timeline-done" />
                 <span>
                   <b>Request submitted</b>
-                  <small>22 Oct 2026 · Aarav Mehta</small>
+                  <small>22 Oct 2026 · Demo Institution Operator</small>
                 </span>
               </div>
               <div>
@@ -1601,7 +1914,6 @@ function AuditReports() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
-              <kbd>⌘ K</kbd>
             </label>
             <select
               aria-label="Filter activity category"

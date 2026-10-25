@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { inflateSync } from 'node:zlib';
 
 export const MAX_DOCUMENT_BYTES = 25 * 1024 * 1024;
 export type ApprovedMime = 'application/pdf' | 'image/jpeg' | 'image/png';
@@ -10,6 +11,7 @@ export const supportedExtractedFdrFields = ['reference', 'bankName', 'principalA
 export interface DocumentExtractor {
   extractPdfText(bytes: Buffer): Promise<{ text: string; fields: ExtractedFdrValues }>;
   runOcr(bytes: Buffer, mime: ApprovedMime): Promise<ExtractedFdrValues>;
+  runOcrWithText?(bytes: Buffer, mime: ApprovedMime): Promise<{ text: string; fields: ExtractedFdrValues }>;
 }
 export function compareExtractedValues(extracted: ExtractedFdrValues, submitted: Record<string, string>) {
   return Object.entries(extracted).filter(([key, value]) => submitted[key] !== undefined && normalizeField(key, submitted[key]!) !== normalizeField(key, value!.value)).map(([key]) => key);
@@ -36,15 +38,83 @@ function normalizeField(field: string, value: string) {
 }
 export const noProviderExtractor: DocumentExtractor = {
   async extractPdfText(bytes) {
-    // PDF text operators can yield useful text without OCR; binary/image-only PDFs fall through.
-    const raw = bytes.toString('latin1').match(/\(([^()]{1,4000})\)\s*Tj/g) ?? [];
-    const text = raw.map((item) => item.slice(1, item.lastIndexOf(')'))).join('\n');
+    // Extract text operators from ordinary and Flate-compressed PDF content streams.
+    const source = bytes.toString('latin1');
+    const streams: string[] = [];
+    let totalStreamChars = 0;
+    const streamPattern = /<<(.*?)>>\s*stream\r?\n([\s\S]*?)\r?\nendstream/g;
+    let streamMatch: RegExpExecArray | null;
+    while (totalStreamChars < 20 * 1024 * 1024 && (streamMatch = streamPattern.exec(source))) {
+      const dictionary = streamMatch[1] ?? '';
+      const data = Buffer.from(streamMatch[2] ?? '', 'latin1');
+      try {
+        const textStream = (dictionary.includes('/FlateDecode') ? inflateSync(data, { maxOutputLength: 5 * 1024 * 1024 }) : data).toString('latin1');
+        streams.push(textStream);
+        totalStreamChars += textStream.length;
+      } catch {
+        // Ignore non-content or unsupported compressed streams and continue with other streams.
+      }
+    }
+    const content = streams.length ? streams.join('\n') : source;
+    const text = extractPdfTextOperators(content);
     return { text, fields: parseFdrText(text) };
   },
   async runOcr() { throw new Error('OCR provider is not configured'); },
 };
 
-function parseFdrText(text: string): ExtractedFdrValues {
+function decodePdfLiteral(value: string) {
+  let decoded = '';
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]!;
+    if (char !== '\\') { decoded += char; continue; }
+    const next = value[++index];
+    if (next === undefined) break;
+    if (/[0-7]/.test(next)) {
+      let octal = next;
+      while (octal.length < 3 && /[0-7]/.test(value[index + 1] ?? '')) octal += value[++index];
+      decoded += String.fromCharCode(Number.parseInt(octal, 8));
+    } else if (next === 'n') decoded += '\n';
+    else if (next === 'r') decoded += '\r';
+    else if (next === 't') decoded += '\t';
+    else if (next === 'b') decoded += '\b';
+    else if (next === 'f') decoded += '\f';
+    else if (next === '\r' && value[index + 1] === '\n') index += 1;
+    else if (next !== '\r' && next !== '\n') decoded += next;
+  }
+  return decoded;
+}
+
+function decodePdfHex(value: string) {
+  const hex = value.replace(/\s/g, '').replace(/>$/, '');
+  const evenHex = hex.length % 2 ? `${hex}0` : hex;
+  const bytes = Buffer.from(evenHex, 'hex');
+  if (bytes.length >= 2 && bytes.length % 2 === 0 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    const unicode = bytes.subarray(2);
+    return Buffer.from(unicode).swap16().toString('utf16le');
+  }
+  return bytes.toString('latin1');
+}
+
+function extractPdfTextOperators(content: string) {
+  const lines: string[] = [];
+  const textOperators = /\(((?:\\.|[^\\)]){1,4000})\)|<([0-9a-f\s]{2,8000})>\s*(?:Tj|')|\[((?:\\.|[^\]]){1,12000})\]\s*TJ/gi;
+  let match: RegExpExecArray | null;
+  while ((match = textOperators.exec(content))) {
+    if (match[1] !== undefined) {
+      // Literal strings are followed by Tj or a quote operator; ignore other parenthesized text.
+      const afterString = content.slice(textOperators.lastIndex, textOperators.lastIndex + 8);
+      if (/^\s*(?:Tj|')/.test(afterString)) lines.push(decodePdfLiteral(match[1]));
+    } else if (match[2] !== undefined) lines.push(decodePdfHex(match[2]));
+    else if (match[3] !== undefined) {
+      const strings = /\(((?:\\.|[^\\)]){1,4000})\)|<([0-9a-f\s]{2,8000})>/gi;
+      let stringMatch: RegExpExecArray | null;
+      while ((stringMatch = strings.exec(match[3]))) lines.push(stringMatch[1] !== undefined ? decodePdfLiteral(stringMatch[1]) : decodePdfHex(stringMatch[2]!));
+    }
+  }
+  return lines.join('\n').slice(0, 200_000);
+}
+
+export function parseFdrText(text: string, confidence = 0.75): ExtractedFdrValues {
   const fields: ExtractedFdrValues = {};
   const patterns: Array<[keyof ExtractedFdrValues, RegExp]> = [
     ['reference', /(?:FDR[ \t]*(?:No\.?|Reference)|Reference)[ \t]*[:#-]?[ \t]*([A-Z0-9/-]{3,80})/i],
@@ -55,7 +125,7 @@ function parseFdrText(text: string): ExtractedFdrValues {
   ];
   for (const [name, pattern] of patterns) {
     const match = text.match(pattern);
-    if (match?.[1]) fields[name] = { value: match[1].trim(), confidence: 0.75, sourceText: match[0] };
+    if (match?.[1]) fields[name] = { value: match[1].trim(), confidence, sourceText: match[0] };
   }
   return fields;
 }
@@ -102,7 +172,7 @@ function isStructurallyValidPng(bytes: Buffer) {
       if (type !== 'IHDR' || length !== 13) return false;
       const width = bytes.readUInt32BE(offset + 8);
       const height = bytes.readUInt32BE(offset + 12);
-      if (width === 0 || height === 0) return false;
+      if (width === 0 || height === 0 || width > 12_000 || height > 12_000 || width * height > 40_000_000) return false;
       sawHeader = true;
     } else if (type === 'IHDR') return false;
     if (type === 'IDAT') { sawImageData = true; imageDataBytes += length; }
@@ -128,7 +198,10 @@ function isStructurallyValidJpeg(bytes: Buffer) {
     const segmentLength = bytes.readUInt16BE(offset);
     if (segmentLength < 2 || offset + segmentLength > bytes.length - 2) return false;
     if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
-      if (segmentLength < 8 || bytes.readUInt16BE(offset + 3) === 0 || bytes.readUInt16BE(offset + 5) === 0) return false;
+      if (segmentLength < 8) return false;
+      const height = bytes.readUInt16BE(offset + 3);
+      const width = bytes.readUInt16BE(offset + 5);
+      if (width === 0 || height === 0 || width > 12_000 || height > 12_000 || width * height > 40_000_000) return false;
       sawFrame = true;
     }
     offset += segmentLength;

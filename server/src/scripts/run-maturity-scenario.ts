@@ -41,7 +41,7 @@ try {
     instrumentIds.push(instrumentId);
     await fdrs.findOneAndUpdate({ _id: instrumentId }, { $set: {
       institutionId: institution._id, reference: item.reference, instrumentNumber: item.reference,
-      bankName: 'Synthetic Bank', branchName: 'Test Branch', holderName: 'Northbridge Institute of Technology',
+      bankName: 'Synthetic Scenario Bank', branchName: 'Synthetic Test Branch', holderName: 'Northbridge Synthetic Institute',
       principalAmount: Types.Decimal128.fromString('250000.00'), currency: 'INR',
       issueDate: new Date(Date.UTC(today.getUTCFullYear() - 1, today.getUTCMonth(), today.getUTCDate())),
       maturityDate: maturityFor(item.offset), documentIds: [], supersededByInstrumentIds: [], dataRevision: 1,

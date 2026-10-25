@@ -20,6 +20,8 @@ This repository contains the initial application foundation, not a complete port
 
 The backend validates environment variables at startup and only reports ready when MongoDB is connected. Do not commit `.env` files. Production values belong in the hosting provider's secret manager.
 
+The server uses Tesseract.js with a locally installed English language model for PNG/JPEG and scanned-PDF OCR. PDF pages are rasterized in-process; OCR processes at most the first 10 pages per upload. Text-based PDFs use direct text extraction without rasterization. The English model is an npm dependency and is loaded locally, without runtime model downloads.
+
 ## Scripts
 
 - `npm run dev` — client and server development processes
