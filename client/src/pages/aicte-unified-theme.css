@@ -300,6 +300,13 @@
   font-size: 13px !important;
 }
 
+.portal .shortcut-grid > button.quick-action-register { background: rgba(24,120,79,.4) !important; border: 0 !important; }
+.portal .shortcut-grid > button.quick-action-review { background: rgba(85,64,164,.4) !important; border: 0 !important; }
+.portal .shortcut-grid > button.quick-action-release { background: rgba(185,77,44,.4) !important; border: 0 !important; }
+.portal .shortcut-grid > button strong { color: inherit !important; }
+.portal .shortcut-grid > button small,
+.portal .shortcut-grid > button > .arrow-glyph { color: inherit !important; }
+
 /* ==========================================
    RESPONSIVE ADJUSTMENTS
    ========================================== */
@@ -430,7 +437,17 @@
   color: #1a548e !important;
   background: transparent;
   border: none;
-  font-size: 20px;
+  padding: 7px;
+}
+
+.topbar .notification.has-unread {
+  color: #164b85 !important;
+}
+
+.topbar .notification:focus-visible {
+  outline: 2px solid #1c67b5;
+  outline-offset: 2px;
+  border-radius: 50%;
 }
 
 /* Divider */
@@ -457,6 +474,20 @@
   background: #dbe9fa !important;
   color: #155ca5 !important;
   font-weight: 700;
+}
+
+.topbar .avatar-small.male-avatar {
+  display: grid;
+  place-items: center;
+}
+
+.topbar .male-avatar svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
 }
 
 /* Mobile responsiveness */
@@ -688,3 +719,50 @@
 .profile-signout:hover { background: #fff6f5; }
 .portal .ocr-text-preview { min-height: 360px; max-height: 70vh; overflow: auto; padding: 18px; background: #f5f8fc; }
 .portal .ocr-text-preview pre { margin: 0; color: #243b56; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+/* Compact assistant launcher: robot beside stacked help text, without a card. */
+.portal .sidebar .help-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 4px;
+  padding: 8px 0;
+  border: 0 !important;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.portal .sidebar .help-spark.robot-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 56px;
+  margin: 0;
+  border-radius: 14px;
+  background: #d8f0e5 !important;
+}
+.portal .sidebar .help-spark.robot-mark > svg { width: 39px; height: 52px; }
+.portal .sidebar .help-copy { display: grid; justify-items: start; gap: 7px; min-width: 0; }
+.portal .sidebar .help-copy > strong { font-size: 12px; font-weight: 800; letter-spacing: .7px; line-height: 1.2; }
+.portal .sidebar .help-copy > button { padding: 0; background: transparent; color: #e4f0ff !important; font-size: 12px; font-weight: 650; line-height: 1.3; text-align: left; }
+
+/* Stronger status fills, with dark foregrounds retained for readable contrast. */
+.portal .days-box:not(.days-overdue) { background: #f5dfb5 !important; }
+.portal .days-box.days-overdue { background: #f8d7d1 !important; }
+.portal .tag-gold { background: #f5dfb5 !important; }
+.portal .tag-red { background: #f5d2cb !important; }
+.portal .tag-blue { background: #d5e7f5 !important; }
+.portal .tag-green { background: #d2eadb !important; }
+.portal .tag-lilac { background: #e2daf3 !important; }
+.portal .c-icon.gold { background: #f5dfb5 !important; }
+.portal .c-icon.red { background: #f5d2cb !important; }
+.portal .c-icon.blue { background: #d5e7f5 !important; }
+.portal .c-icon.green { background: #d2eadb !important; }
+.portal .activity-icon.amber, .portal .activity-icon.orange { background: #f4dcc4 !important; }
+.portal .activity-icon.blue { background: #d5e7f5 !important; }
+.portal .activity-icon.purple { background: #e2daf3 !important; }
+.portal .activity-icon.green, .portal .activity-icon.teal { background: #d2eadb !important; }
+.portal .activity-icon.neutral { background: #e5e9e6 !important; }
+.portal .extract-mismatch, .portal .discrepancy-card { background: #f8e8c9 !important; }
+.portal .discrepancy-card > div > b { background: #f0d49e !important; }

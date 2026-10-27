@@ -12,6 +12,22 @@ export interface PortalUser {
   status?: 'active' | 'suspended' | 'invited';
   memberships: { institutionId: string; roles: string[] }[];
 }
+export interface PortalNotification {
+  id: string;
+  title: string;
+  message: string;
+  state: 'unread' | 'read' | 'dismissed';
+  createdAt: string;
+}
+export type AssistantChatMessage = { role: 'user' | 'assistant'; content: string };
+export type InstitutionRole = 'institution_admin' | 'institution_operator' | 'official_reviewer' | 'auditor';
+export interface InstitutionUser {
+  id: string;
+  email: string;
+  displayName: string;
+  status: 'active' | 'suspended';
+  roles: InstitutionRole[];
+}
 export interface DashboardResponse {
   institutionId: string;
   displayName: string;
@@ -90,6 +106,19 @@ export async function getCurrentUser(): Promise<PortalUser | null> {
   if (response.status === 401) return null;
   if (!response.ok) throw new ApiError('Could not restore your session. Try refreshing the page.', response.status);
   return ((await response.json()) as { user: PortalUser }).user;
+}
+
+export async function sendAssistantMessage(messages: AssistantChatMessage[], currentScreen: string): Promise<string> {
+  const response = await fetch('/api/assistant/chat', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...(await csrfHeader('Could not start a secure assistant request.')) },
+    body: JSON.stringify({ messages, currentScreen }),
+  });
+  const body = await response.json().catch(() => ({})) as { answer?: string; error?: string };
+  if (!response.ok) throw new ApiError(body.error ?? 'The assistant could not answer right now.', response.status);
+  if (!body.answer) throw new ApiError('The assistant returned an empty reply.', response.status);
+  return body.answer;
 }
 
 export async function updateUsername(displayName: string): Promise<PortalUser> {
@@ -217,6 +246,41 @@ export async function getDashboard(institutionId: string): Promise<DashboardResp
     throw new ApiError(message, response.status);
   }
   return (await response.json()) as DashboardResponse;
+}
+
+export async function getNotifications(institutionId: string): Promise<PortalNotification[]> {
+  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/workflows/notifications`, { credentials: 'include' });
+  if (!response.ok) throw new ApiError('Could not load notifications.', response.status);
+  return ((await response.json()) as { notifications: PortalNotification[] }).notifications;
+}
+
+export async function getInstitutionUsers(institutionId: string): Promise<InstitutionUser[]> {
+  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/users`, { credentials: 'include' });
+  const body = await response.json().catch(() => ({})) as { users?: InstitutionUser[]; error?: string };
+  if (!response.ok) throw new ApiError(body.error ?? 'Could not load institution users.', response.status);
+  return body.users ?? [];
+}
+
+export async function createInstitutionUser(institutionId: string, details: { email: string; displayName: string; role: InstitutionRole }): Promise<{ user: InstitutionUser; temporaryPassword: string }> {
+  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/users`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'content-type': 'application/json', ...(await csrfHeader('Could not start a secure user creation request.')) },
+    body: JSON.stringify(details),
+  });
+  const body = await response.json().catch(() => ({})) as { user?: InstitutionUser; temporaryPassword?: string; error?: string };
+  if (!response.ok || !body.user || !body.temporaryPassword) throw new ApiError(body.error ?? 'Could not create institution user.', response.status);
+  return { user: body.user, temporaryPassword: body.temporaryPassword };
+}
+
+export async function updateInstitutionUserAccess(institutionId: string, userId: string, access: { roles: InstitutionRole[]; status: 'active' | 'suspended' }): Promise<InstitutionUser> {
+  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/users/${encodeURIComponent(userId)}/access`, {
+    method: 'PATCH', credentials: 'include',
+    headers: { 'content-type': 'application/json', ...(await csrfHeader('Could not start a secure access update.')) },
+    body: JSON.stringify(access),
+  });
+  const body = await response.json().catch(() => ({})) as { user?: InstitutionUser; error?: string };
+  if (!response.ok || !body.user) throw new ApiError(body.error ?? 'Could not update user access.', response.status);
+  return body.user;
 }
 
 export async function getVerificationInstruments(institutionId: string): Promise<VerificationInstrument[]> {

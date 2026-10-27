@@ -3,7 +3,7 @@ import { Types, type HydratedDocument, type Model } from 'mongoose';
 import { auditWriter } from '../auth/audit-writer.js';
 import type { AuditWriter } from '../auth/types.js';
 import { requireAuthentication } from '../middleware/authentication.js';
-import { requireInstitutionRole } from '../middleware/authorization.js';
+import { requireInstitutionPermission } from '../middleware/authorization.js';
 import { DocumentModel, type DocumentRecord } from '../models/documents.js';
 import { FdrModel, type FdrRecord } from '../models/fdrs.js';
 import { NotificationModel, type NotificationRecord } from '../models/notifications.js';
@@ -29,10 +29,6 @@ const renewals = RenewalRecordModel as Model<RenewalRecord>;
 const releases = ReleaseRequestModel as Model<ReleaseRequestRecord>;
 const policies = WorkflowPolicyModel as Model<WorkflowPolicyRecord>;
 const notifications = NotificationModel as Model<NotificationRecord>;
-const operators = ['institution_admin', 'institution_operator'] as const;
-const reviewers = ['institution_admin', 'official_reviewer'] as const;
-const management = ['institution_admin'] as const;
-const allInstitutionRoles = ['institution_admin', 'institution_operator', 'official_reviewer', 'auditor'] as const;
 const routeParam = (req: import('express').Request, name: string) => {
   const value = req.params[name];
   return Array.isArray(value) ? value[0] : value;
@@ -61,13 +57,13 @@ export function createInstitutionWorkflowRouter(dependencies: InstitutionWorkflo
     return count === ids.length;
   };
 
-  router.get('/notifications', requireInstitutionRole(allInstitutionRoles), async (req, res, next) => {
+  router.get('/notifications', requireInstitutionPermission('notifications:read'), async (req, res, next) => {
     try {
       const items = await notifications.find({ institutionId: institution(req), recipientId: req.authUser!._id }).sort({ createdAt: -1 }).limit(100).lean().exec();
       res.json({ notifications: items });
     } catch (error) { next(error); }
   });
-  router.post('/notifications/read', requireInstitutionRole(allInstitutionRoles), async (req, res, next) => {
+  router.post('/notifications/read', requireInstitutionPermission('notifications:read'), async (req, res, next) => {
     try {
       const parsed = notificationReadCommandSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: 'Invalid notification read request', issues: parsed.error.issues }); return; }
@@ -76,11 +72,11 @@ export function createInstitutionWorkflowRouter(dependencies: InstitutionWorkflo
     } catch (error) { next(error); }
   });
 
-  router.get('/maturity/policy', requireInstitutionRole([...management]), async (req, res, next) => {
+  router.get('/maturity/policy', requireInstitutionPermission('compliance:manage'), async (req, res, next) => {
     try { res.json({ policy: await policies.findOne({ institutionId: institution(req) }).lean().exec() }); }
     catch (error) { next(error); }
   });
-  router.put('/maturity/policy', requireInstitutionRole([...management]), async (req, res, next) => {
+  router.put('/maturity/policy', requireInstitutionPermission('compliance:manage'), async (req, res, next) => {
     try {
       const parsed = workflowPolicyUpdateSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: 'Invalid workflow policy', issues: parsed.error.issues }); return; }
@@ -93,14 +89,14 @@ export function createInstitutionWorkflowRouter(dependencies: InstitutionWorkflo
       res.json({ policy });
     } catch (error) { next(error); }
   });
-  router.get('/maturity/cases', requireInstitutionRole([...operators, ...reviewers]), async (req, res, next) => {
+  router.get('/maturity/cases', requireInstitutionPermission('compliance:read'), async (req, res, next) => {
     try {
       const current = now(); const today = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth(), current.getUTCDate()));
       const records = await fdrs.find({ institutionId: institution(req), instrumentState: { $in: ['active', 'matured'] }, maturityDate: { $lt: today } }).select('_id maturityDate').lean().exec();
       res.json({ asOf: today, overdueCases: findOverdueCases(records, current) });
     } catch (error) { next(error); }
   });
-  router.post('/maturity/run', requireInstitutionRole([...management]), async (req, res, next) => {
+  router.post('/maturity/run', requireInstitutionPermission('compliance:manage'), async (req, res, next) => {
     try {
       const current = now();
       const generated = await generateMaturityNotifications(institution(req).toString(), current, audit, req.requestId, String(req.authUser!._id));
@@ -111,7 +107,7 @@ export function createInstitutionWorkflowRouter(dependencies: InstitutionWorkflo
     } catch (error) { next(error); }
   });
 
-  router.post('/renewals', requireInstitutionRole([...operators]), async (req, res, next) => {
+  router.post('/renewals', requireInstitutionPermission('renewals:create'), async (req, res, next) => {
     try {
       const parsed = renewalRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: 'Invalid renewal request', issues: parsed.error.issues }); return; }
@@ -136,13 +132,13 @@ export function createInstitutionWorkflowRouter(dependencies: InstitutionWorkflo
       res.status(201).json({ id: record.id, status: record.status, replacementInstrumentId: record.replacementInstrumentId });
     } catch (error) { next(error); }
   });
-  router.get('/renewals', requireInstitutionRole([...operators, ...reviewers]), async (req, res, next) => {
+  router.get('/renewals', requireInstitutionPermission('renewals:read'), async (req, res, next) => {
     try {
       const items = await renewals.find({ institutionId: institution(req) }).sort({ createdAt: -1 }).limit(200).lean().exec();
       res.json({ renewals: items });
     } catch (error) { next(error); }
   });
-  router.post('/renewals/:renewalId/transition', requireInstitutionRole([...operators, ...reviewers]), async (req, res, next) => {
+  router.post('/renewals/:renewalId/transition', requireInstitutionPermission('renewals:read'), async (req, res, next) => {
     try {
       const parsed = renewalTransitionSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: 'Invalid renewal transition', issues: parsed.error.issues }); return; }
@@ -178,7 +174,7 @@ export function createInstitutionWorkflowRouter(dependencies: InstitutionWorkflo
     } catch (error) { if (error instanceof Error && (error.message.startsWith('Transition ') || error.message.startsWith('Insufficient permissions'))) { res.status(error.message.startsWith('Insufficient') ? 403 : 409).json({ error: error.message }); return; } next(error); }
   });
 
-  router.post('/release-requests', requireInstitutionRole([...operators]), async (req, res, next) => {
+  router.post('/release-requests', requireInstitutionPermission('release:request'), async (req, res, next) => {
     try {
       const parsed = releaseRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: 'Invalid release/refund request', issues: parsed.error.issues }); return; }
@@ -211,13 +207,13 @@ export function createInstitutionWorkflowRouter(dependencies: InstitutionWorkflo
       res.status(201).json({ id: record.id, status: record.status, financialTransferInitiated: false });
     } catch (error) { next(error); }
   });
-  router.get('/release-requests', requireInstitutionRole([...operators, ...reviewers]), async (req, res, next) => {
+  router.get('/release-requests', requireInstitutionPermission('release:read'), async (req, res, next) => {
     try {
       const items = await releases.find({ institutionId: institution(req) }).sort({ createdAt: -1 }).limit(200).lean().exec();
       res.json({ requests: items, financialTransfersInitiated: false });
     } catch (error) { next(error); }
   });
-  router.post('/release-requests/:requestId/transition', requireInstitutionRole([...operators, ...reviewers]), async (req, res, next) => {
+  router.post('/release-requests/:requestId/transition', requireInstitutionPermission('release:read'), async (req, res, next) => {
     try {
       const parsed = releaseTransitionSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: 'Invalid release/refund transition', issues: parsed.error.issues }); return; }

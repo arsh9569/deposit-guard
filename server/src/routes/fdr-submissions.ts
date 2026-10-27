@@ -2,7 +2,7 @@ import { Router } from 'express';
 import express from 'express';
 import { Types, type Model } from 'mongoose';
 import { requireAuthentication } from '../middleware/authentication.js';
-import { requireInstitutionRole } from '../middleware/authorization.js';
+import { requireInstitutionPermission } from '../middleware/authorization.js';
 import { DocumentModel, type DocumentRecord } from '../models/documents.js';
 import { FdrModel, type FdrRecord } from '../models/fdrs.js';
 import { OcrCorrectionModel, OcrExtractionModel, type OcrCorrectionRecord, type OcrExtractionRecord } from '../models/ocr-extractions.js';
@@ -23,6 +23,7 @@ import {
 import { StudentProfileModel } from '../models/student-profiles.js';
 
 import { tesseractDocumentExtractor } from '../services/tesseract-ocr.js';
+
 const roles = ['institution_admin', 'institution_operator'] as const;
 const fdrs = FdrModel as Model<FdrRecord>;
 const documents = DocumentModel as Model<DocumentRecord>;
@@ -33,7 +34,7 @@ export function createFdrSubmissionRouter(extractor: DocumentExtractor = tessera
   const router = Router({ mergeParams: true });
   router.use(express.raw({ type: ['application/pdf', 'image/jpeg', 'image/png'], limit: '25mb' }));
   router.use(requireAuthentication);
-  router.use(requireInstitutionRole(roles));
+  router.use(requireInstitutionPermission('instruments:create'));
   const tenant = (req: import('express').Request) => new Types.ObjectId(req.institutionScope!.institutionId);
 
   router.post('/drafts', async (req, res, next) => {

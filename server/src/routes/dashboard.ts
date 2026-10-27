@@ -8,6 +8,7 @@ import { RenewalRecordModel, type RenewalRecord } from '../models/renewal-record
 import { WorkflowPolicyModel, type WorkflowPolicyRecord } from '../models/workflow-policies.js';
 import { objectIdSchema } from '../validators/model-schemas.js';
 import { calculateDashboardMetrics } from '../services/dashboard-metrics.js';
+import { hasInstitutionPermission } from '../auth/rbac.js';
 
 const fdrs = FdrModel as Model<FdrRecord>;
 const renewals = RenewalRecordModel as Model<RenewalRecord>;
@@ -25,7 +26,7 @@ dashboardRouter.get('/', async (req, res, next) => {
     if (requested && !objectIdSchema.safeParse(requested).success) { res.status(400).json({ error: 'Invalid institution' }); return; }
     const membership = req.authUser!.memberships.find((item) => item.active && (!requested || String(item.institutionId) === requested));
     if (!membership) { res.status(404).json({ error: 'Institution not found' }); return; }
-    const allowed = membership.roles.some((role) => ['institution_admin', 'institution_operator', 'official_reviewer', 'auditor'].includes(role));
+    const allowed = hasInstitutionPermission(membership.roles, 'dashboard:read');
     if (!allowed) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
     const institutionId = new Types.ObjectId(membership.institutionId);
     const policy = await policies.findOne({ institutionId }).lean().exec();

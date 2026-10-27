@@ -1,4 +1,5 @@
 import type { InstitutionRole, RenewalStatus, WorkflowState } from '../models/domain.js';
+import { hasInstitutionPermission } from '../auth/rbac.js';
 export type RenewalAction = 'submit' | 'approve' | 'deny' | 'request_information' | 'start_processing' | 'complete' | 'withdraw';
 export type ReleaseAction = 'start_scrutiny' | 'request_information' | 'approve' | 'deny' | 'complete';
 
@@ -8,8 +9,8 @@ export function assertReplacementLink(sourceId: string, existingReplacementIds: 
 }
 
 export function transitionRenewal(from: RenewalStatus, action: RenewalAction, roles: readonly InstitutionRole[]): RenewalStatus {
-  const operator = roles.some((role) => role === 'institution_operator' || role === 'institution_admin');
-  const reviewer = roles.some((role) => role === 'official_reviewer' || role === 'institution_admin');
+  const operator = hasInstitutionPermission(roles, 'renewals:create');
+  const reviewer = hasInstitutionPermission(roles, 'renewals:decide');
   const next: Partial<Record<RenewalStatus, Partial<Record<RenewalAction, RenewalStatus>>>> = {
     pending: { submit: 'submitted', withdraw: 'withdrawn' },
     requested: { submit: 'submitted', withdraw: 'withdrawn' },
@@ -27,8 +28,8 @@ export function transitionRenewal(from: RenewalStatus, action: RenewalAction, ro
 }
 
 export function transitionRelease(from: WorkflowState, action: ReleaseAction, roles: readonly InstitutionRole[]): WorkflowState {
-  const operator = roles.some((role) => role === 'institution_operator' || role === 'institution_admin');
-  const reviewer = roles.some((role) => role === 'official_reviewer' || role === 'institution_admin');
+  const operator = hasInstitutionPermission(roles, 'release:request');
+  const reviewer = hasInstitutionPermission(roles, 'release:decide');
   const next: Partial<Record<WorkflowState, Partial<Record<ReleaseAction, WorkflowState>>>> = {
     requested: { start_scrutiny: 'under_review' },
     under_review: { approve: 'approved', deny: 'denied', request_information: 'more_information_required' },

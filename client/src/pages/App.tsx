@@ -6,21 +6,30 @@ import './aicte-unified-theme.css';
 import { auditEvents, fdrRecords, institution } from '../features/demo-data';
 import {
   createFdrDraft,
+  createInstitutionUser,
   getCurrentUser,
   getDashboard,
+  getInstitutionUsers,
+  getNotifications,
   getSupportedFdrMimeType,
   getVerificationAttempts,
   getVerificationInstruments,
   runVerificationAttempt,
   saveOcrCorrection,
+  sendAssistantMessage,
   signIn,
   signOut,
   submitFdrDraft,
   updateFdrDraft,
+  updateInstitutionUserAccess,
   updateUsername,
   uploadFdrForOcr,
+  type AssistantChatMessage,
   type DashboardResponse,
+  type InstitutionRole,
+  type InstitutionUser,
   type OcrUploadResult,
+  type PortalNotification,
   type PortalUser,
   type VerificationAttempt,
   type VerificationInstrument,
@@ -39,8 +48,22 @@ import {
 
 import type { LinkedStudent, AssignableFdr } from '../lib/api';
 type Screen =
-  'dashboard' | 'student-linking' | 'register' | 'ocr' | 'review'| 'verification' | 'compliance' | 'release' | 'audit'
-  | 'student-fdrs' | 'student-status' | 'student-documents' | 'student-maturity' | 'student-refunds' | 'student-profile';
+  'dashboard'
+  | 'student-linking'
+  | 'register'
+  | 'ocr'
+  | 'review'
+  | 'verification'
+  | 'compliance'
+  | 'release'
+  | 'audit'
+  | 'users'
+  | 'student-fdrs'
+  | 'student-status'
+  | 'student-documents'
+  | 'student-maturity'
+  | 'student-refunds'
+  | 'student-profile';
 type NavItem = { id: Screen; label: string; glyph: string; capability: string };
 const OCR_STORAGE_KEY = 'depositguard.demo.ocr-corrections.v2-amount-fixture';
 const nav: NavItem[] = [
@@ -51,8 +74,9 @@ const nav: NavItem[] = [
   { id: 'review', label: 'Official scrutiny', glyph: '✓', capability: 'reviews:decide' },
   { id: 'verification', label: 'Verification', glyph: '◇', capability: 'verification:read' },
   { id: 'compliance', label: 'Maturity & actions', glyph: '◷', capability: 'compliance:read' },
-  { id: 'release', label: 'Release / refund', glyph: '↻', capability: 'release:request' },
+  { id: 'release', label: 'Release / refund', glyph: '↻', capability: 'release:read' },
   { id: 'audit', label: 'Audit & reports', glyph: '▣', capability: 'audit:read' },
+  { id: 'users', label: 'Users & roles', glyph: '♙', capability: 'users:manage' },
 ];
 const studentNav: NavItem[] = [
   { id: 'dashboard', label: 'Overview', glyph: '◫', capability: 'student:read' },
@@ -64,13 +88,50 @@ const studentNav: NavItem[] = [
   { id: 'student-profile', label: 'My Profile', glyph: '▣', capability: 'student:read' },
 ];
 
+const permissionsByRole: Record<string, string[]> = {
+  institution_admin: [
+    ...nav.map((item) => item.capability),
+    'compliance:manage',
+    'verification:run',
+    'release:request',
+    'release:review',
+  ],
+
+  institution_operator: [
+    'dashboard:read',
+    'students:link',
+    'instruments:create',
+    'documents:review',
+    'verification:read',
+    'compliance:read',
+    'release:read',
+    'release:request',
+    'audit:read',
+  ],
+
+  official_reviewer: [
+    'dashboard:read',
+    'documents:review',
+    'reviews:decide',
+    'verification:read',
+    'compliance:read',
+    'release:read',
+    'release:review',
+    'audit:read',
+  ],
+
+  auditor: [
+    'dashboard:read',
+    'verification:read',
+    'compliance:read',
+    'audit:read',
+  ],
+};
+
 function permissionsFor(roles: string[]) {
-  const permissions = new Set<string>();
-  if (roles.includes('institution_admin')) return new Set(nav.map((item) => item.capability));
-if (roles.includes('institution_operator')) ['dashboard:read', 'students:link', 'instruments:create', 'documents:review', 'verification:read', 'compliance:read', 'release:request', 'audit:read'].forEach((permission) => permissions.add(permission));
-  if (roles.includes('official_reviewer')) ['dashboard:read', 'documents:review', 'reviews:decide', 'verification:read', 'compliance:read', 'audit:read'].forEach((permission) => permissions.add(permission));
-  if (roles.includes('auditor')) ['dashboard:read', 'verification:read', 'compliance:read', 'audit:read'].forEach((permission) => permissions.add(permission));
-  return permissions;
+  return new Set(
+    roles.flatMap((role) => permissionsByRole[role] ?? [])
+  );
 }
 
 function Glyph({ children }: { children: ReactNode }) {
@@ -125,26 +186,54 @@ export function App() {
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState('');
-
+  const [notifications, setNotifications] = useState<PortalNotification[]>([]);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState('');
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [ocrResult, setOcrResult] = useState<OcrUploadResult | null>(null);
+  const displayName =
+    sessionUser?.displayName === 'Demo Institution Operator'
+      ? 'Manjeet Singh'
+      : sessionUser?.displayName;
 
   const activeMembership = sessionUser?.memberships[0];
-  console.log('Logged in user:', sessionUser?.displayName);
-console.log('Account roles:', activeMembership?.roles);
-console.log('Institution ID:', activeMembership?.institutionId);
   const isStudent = sessionUser?.accountType === 'student';
+
+  useEffect(() => {
+    const institutionId = activeMembership?.institutionId;
+
+    if (!institutionId || isStudent) {
+      setNotifications([]);
+      return;
+    }
+
+    let active = true;
+
+    getNotifications(institutionId)
+      .then((items) => {
+        if (active) setNotifications(items);
+      })
+      .catch(() => {
+        if (active) setNotifications([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeMembership?.institutionId, isStudent]);
+
+  const unreadNotificationCount = notifications.filter(
+    (item) => item.state === 'unread'
+  ).length;
 
   const allowedNav = isStudent
     ? studentNav
     : nav.filter((item) =>
         permissionsFor(activeMembership?.roles ?? []).has(item.capability)
       );
-
   useEffect(() => {
     let active = true;
 
@@ -204,6 +293,7 @@ console.log('Institution ID:', activeMembership?.institutionId);
   const go = (page: Screen) => {
     setScreen(page);
     setMobileOpen(false);
+    setAssistantOpen(false);
     setToast('');
   };
   const toggleProfile = () => {
@@ -264,6 +354,7 @@ console.log('Institution ID:', activeMembership?.institutionId);
     allowedNav.find((item) => item.id === screen)?.label ?? 'Overview';
   return (
     <div className="portal">
+      {assistantOpen && <WorkflowAssistant currentScreen={screen} onClose={() => setAssistantOpen(false)} onNavigate={go} />}
       {mobileOpen && (
         <button
           className="mobile-scrim"
@@ -310,20 +401,21 @@ console.log('Institution ID:', activeMembership?.institutionId);
         </nav>
         <div className="sidebar-spacer" />
         <div className="help-box">
-          <span className="help-spark">✳</span>
-          <strong>Need a hand?</strong>
-          <p>Find tips for FDR workflows and common tasks.</p>
-          <button onClick={() => setToast('The prototype guide is being prepared.')}>
-            Open help center <Arrow />
-          </button>
+          <span className="help-spark robot-mark"><BabyRobot className="assistant-baby" /></span>
+          <span className="help-copy">
+            <strong>NEED HELP?</strong>
+            <button onClick={() => setAssistantOpen(true)}>Ask the assistant</button>
+          </span>
         </div>
         <button className="sidebar-user" onClick={toggleProfile} title="Open profile" aria-haspopup="dialog" aria-expanded={profileOpen}>
-          <span className="avatar">{sessionUser?.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
+          <span className="avatar">{displayName?.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
           <span>
-            <strong>{sessionUser?.displayName}</strong>
-            <small>
-             {isStudent ? 'Student' : activeMembership?.roles.join(', ') ?? 'No institution membership'}
-            </small>
+<strong>{displayName}</strong>
+<small>
+  {isStudent
+    ? 'Student'
+    : activeMembership?.roles.join(', ') ?? 'No institution membership'}
+</small>
           </span>
           <b>···</b>
         </button>
@@ -343,20 +435,21 @@ console.log('Institution ID:', activeMembership?.institutionId);
             <strong>{title}</strong>
           </div>
           <div className="top-actions">
-            <span className="demo-chip">
-              <i /> 24-record synthetic demo
-            </span>
             <button
-              className="notification"
-              onClick={() => setToast('You are all caught up on notifications.')}
-              aria-label="Notifications"
+              className={`notification${unreadNotificationCount ? ' has-unread' : ''}`}
+              onClick={() => setToast(unreadNotificationCount ? `${unreadNotificationCount} unread notification${unreadNotificationCount === 1 ? '' : 's'}.` : 'You are all caught up on notifications.')}
+              aria-label={unreadNotificationCount ? `Notifications, ${unreadNotificationCount} unread` : 'Notifications, none unread'}
+              title={unreadNotificationCount ? `${unreadNotificationCount} unread notification${unreadNotificationCount === 1 ? '' : 's'}` : 'No unread notifications'}
             >
-              ♧<i />
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+              {unreadNotificationCount > 0 && <i />}
             </button>
             <span className="top-separator" />
             <button className="top-account" onClick={toggleProfile} aria-haspopup="dialog" aria-expanded={profileOpen}>
-              <span className="avatar avatar-small">{sessionUser?.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
-              <span>{sessionUser?.displayName}</span>
+              <span className="avatar avatar-small male-avatar" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" /><path d="M4.5 21a7.5 7.5 0 0 1 15 0" /></svg>
+              </span>
+              <span>{displayName}</span>
               <b>⌄</b>
             </button>
           </div>
@@ -377,7 +470,7 @@ console.log('Institution ID:', activeMembership?.institutionId);
                   </div>
                 </form>
               ) : (
-                <button className="profile-action" type="button" onClick={() => { setUsernameDraft(sessionUser!.displayName); setEditingUsername(true); }}>Change username</button>
+                <button className="profile-action" type="button" onClick={() => { setUsernameDraft(displayName ?? ''); setEditingUsername(true); }}>Change username</button>
               )}
               {profileError && <p className="profile-error" role="alert">{profileError}</p>}
               <button className="profile-signout" type="button" onClick={handleSignOut} disabled={profileBusy}>{profileBusy ? 'Please wait…' : 'Sign out'}</button>
@@ -405,7 +498,7 @@ console.log('Institution ID:', activeMembership?.institutionId);
             <Dashboard
               go={go}
               institutionId={activeMembership.institutionId}
-              displayName={sessionUser.displayName}
+              displayName={displayName ?? ''}
               canCreateFdr={permissionsFor(activeMembership.roles).has('instruments:create')}
               onSessionExpired={() => {
                 setSessionUser(null);
@@ -461,23 +554,19 @@ console.log('Institution ID:', activeMembership?.institutionId);
                 setScreen('ocr');
                 setToast(result.extractionStatus === 'complete' ? 'Document uploaded and text extraction completed.' : 'Document uploaded, but automatic text extraction failed. Review the file and enter any missing fields manually.');
               }}
-              onDone={(message) => {
-                setToast(message);
-                setScreen('dashboard');
-              }}
             />
           )}
           {!isStudent && screen === 'ocr' && (
-            ocrResult
-              ? (
-                <UploadedOcrReview
-                  result={ocrResult}
-                  institutionId={activeMembership?.institutionId ?? ''}
-                  onDone={setToast}
-                  onBack={() => setScreen('register')}
-                />
-              )
-              : <OcrReview onDone={setToast} />
+            ocrResult ? (
+              <UploadedOcrReview
+                result={ocrResult}
+                institutionId={activeMembership?.institutionId ?? ''}
+                onDone={setToast}
+                onBack={() => setScreen('register')}
+              />
+            ) : (
+              <OcrReview onDone={setToast} />
+            )
           )}
 
           {!isStudent && screen === 'review' && (
@@ -492,16 +581,31 @@ console.log('Institution ID:', activeMembership?.institutionId);
           )}
 
           {!isStudent && screen === 'compliance' && (
-            <Compliance go={go} />
+            <Compliance
+              go={go}
+              roles={activeMembership?.roles ?? []}
+            />
           )}
 
           {!isStudent && screen === 'release' && (
-            <ReleaseRequests onDone={setToast} />
+            <ReleaseRequests
+              onDone={setToast}
+              roles={activeMembership?.roles ?? []}
+            />
           )}
 
           {!isStudent && screen === 'audit' && (
             <AuditReports />
           )}
+
+          {!isStudent &&
+            screen === 'users' &&
+            activeMembership &&
+            permissionsFor(activeMembership.roles).has('users:manage') && (
+              <UserManagement
+                institutionId={activeMembership.institutionId}
+              />
+            )}
         </main>
         <footer className="portal-footer">
           <span>
@@ -512,6 +616,80 @@ console.log('Institution ID:', activeMembership?.institutionId);
       </section>
     </div>
   );
+}
+
+function WorkflowAssistant({ currentScreen, onClose, onNavigate }: { currentScreen: Screen; onClose: () => void; onNavigate: (page: Screen) => void }) {
+  const [question, setQuestion] = useState('');
+  const [messages, setMessages] = useState<AssistantChatMessage[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const conversationRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (conversationRef.current) conversationRef.current.scrollTop = conversationRef.current.scrollHeight; }, [messages, busy, error]);
+  const submitQuestion = async (text: string) => {
+    const content = text.trim();
+    if (!content || busy) return;
+    const updated = [...messages, { role: 'user' as const, content }];
+    setMessages(updated);
+    setQuestion('');
+    setError('');
+    setBusy(true);
+    try {
+      const answer = await sendAssistantMessage(updated.slice(-15), currentScreen);
+      setMessages([...updated, { role: 'assistant', content: answer }]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'I could not answer just now. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const ask = (event: FormEvent) => { event.preventDefault(); void submitQuestion(question); };
+  const shortcuts: { label: string; page: Screen }[] = [
+    { label: 'Register an FDR', page: 'register' },
+    { label: 'Review documents', page: 'ocr' },
+    { label: 'Check maturities', page: 'compliance' },
+    { label: 'Start a release', page: 'release' },
+  ];
+  return (
+    <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="workflow-assistant" role="dialog" aria-modal="true" aria-label="DepositGuard workflow assistant">
+        <header>
+          <BabyRobot className="assistant-robot" />
+          <span><strong>DepositGuard Assistant</strong><small>Ask me about your FDR workflows</small></span>
+          <button type="button" onClick={onClose} aria-label="Close assistant">×</button>
+        </header>
+        <div className="assistant-conversation" ref={conversationRef} aria-live="polite">
+          {messages.length === 0 ? <div className="assistant-welcome"><BabyRobot className="assistant-baby" /><p>Hi! I’m your DepositGuard helper. Ask me a question and I’ll help you find the next step.</p></div> : messages.map((message, index) => <div className={`assistant-message ${message.role}`} key={`${message.role}-${index}`}>{message.role === 'assistant' && <BabyRobot className="assistant-message-robot" />}<p>{message.content}</p></div>)}
+          {busy && <div className="assistant-message assistant"><BabyRobot className="assistant-message-robot" /><p className="assistant-typing">Thinking…</p></div>}
+          {error && <div className="assistant-error" role="alert">{error}</div>}
+          {messages.length === 0 && <div className="assistant-shortcuts">{shortcuts.map((item) => <button type="button" key={item.page} onClick={() => onNavigate(item.page)}>{item.label}</button>)}</div>}
+        </div>
+        <form className="assistant-ask" onSubmit={ask}>
+          <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Message your assistant…" aria-label="Message your assistant" />
+          <button type="submit" disabled={!question.trim() || busy} aria-label="Send message">➤</button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function BabyRobot({ className = '' }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 100 132" aria-hidden="true">
+    <ellipse cx="50" cy="126" rx="27" ry="4" fill="#dce7f3" />
+    <path d="M50 10V4m-5 0h10" stroke="#4d7daf" strokeWidth="3" strokeLinecap="round" />
+    <circle cx="50" cy="4" r="4" fill="#f4a75b" />
+    <rect x="21" y="18" width="58" height="43" rx="19" fill="#e9f3ff" stroke="#567fa9" strokeWidth="3" />
+    <rect x="28" y="27" width="44" height="26" rx="12" fill="#183b61" />
+    <circle cx="40" cy="39" r="3.5" fill="#7fe1d0" /><circle cx="60" cy="39" r="3.5" fill="#7fe1d0" />
+    <path d="M45 47q5 4 10 0" fill="none" stroke="#c3f3e8" strokeWidth="2" strokeLinecap="round" />
+    <circle cx="17" cy="39" r="6" fill="#9fc3e8" stroke="#567fa9" strokeWidth="2" /><circle cx="83" cy="39" r="6" fill="#9fc3e8" stroke="#567fa9" strokeWidth="2" />
+    <path d="M29 69q21-12 42 0l7 31q-28 15-56 0z" fill="#8eb7e3" stroke="#567fa9" strokeWidth="3" strokeLinejoin="round" />
+    <rect x="39" y="74" width="22" height="18" rx="6" fill="#e9f3ff" stroke="#567fa9" strokeWidth="2" />
+    <path d="M23 74 13 91m64-17 10 17" fill="none" stroke="#567fa9" strokeWidth="7" strokeLinecap="round" />
+    <circle cx="13" cy="93" r="5" fill="#f4a75b" /><circle cx="87" cy="93" r="5" fill="#f4a75b" />
+    <path d="m39 104-4 13m26-13 4 13" fill="none" stroke="#567fa9" strokeWidth="8" strokeLinecap="round" />
+    <path d="M28 119h12m20 0h12" stroke="#f4a75b" strokeWidth="7" strokeLinecap="round" />
+    <circle cx="50" cy="82" r="3" fill="#62b9a8" />
+  </svg>;
 }
 
 function Login({
@@ -1105,7 +1283,7 @@ function Dashboard({
         <div>
           <SectionTag>QUICK ACTIONS</SectionTag>
         </div>
-        {canCreateFdr && <button onClick={() => go('register')}>
+        {canCreateFdr && <button className="quick-action-register" onClick={() => go('register')}>
           <i className="shortcut-icon mint">＋</i>
           <span>
             <strong>Register an FDR</strong>
@@ -1113,7 +1291,7 @@ function Dashboard({
           </span>
           <Arrow />
         </button>}
-        <button onClick={() => go('ocr')}>
+        <button className="quick-action-review" onClick={() => go('ocr')}>
           <i className="shortcut-icon lilac">⌗</i>
           <span>
             <strong>Review document extraction</strong>
@@ -1121,7 +1299,7 @@ function Dashboard({
           </span>
           <Arrow />
         </button>
-        <button onClick={() => go('release')}>
+        <button className="quick-action-release" onClick={() => go('release')}>
           <i className="shortcut-icon peach">↻</i>
           <span>
             <strong>Start a release request</strong>
@@ -1134,7 +1312,7 @@ function Dashboard({
   );
 }
 
-function Registration({ institutionId, onDone, onExtracted }: { institutionId: string; onDone: (message: string) => void; onExtracted: (result: OcrUploadResult) => void }) {
+function Registration({ institutionId, onExtracted }: { institutionId: string; onExtracted: (result: OcrUploadResult) => void }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [draftId, setDraftId] = useState('');
@@ -1215,19 +1393,13 @@ function Registration({ institutionId, onDone, onExtracted }: { institutionId: s
       <PageTitle
         overline="INSTRUMENT MANAGEMENT"
         title="Register an FDR"
-        description="Add deposit details and supporting evidence to your institution’s register."
-        action={
-          <button className="inline-link" onClick={() => onDone('Registration closed.')}>
-            Cancel
-          </button>
-        }
+        description="Add deposit details and upload a document for text extraction."
       />
       <form ref={formRef} className="registration-grid" noValidate onSubmit={submit} onChange={() => { setDraft(false); if (message) setMessage(''); }}>
         <div className="form-stack">
           <Panel>
             <PanelHeading
               title="Institution & reference"
-              detail="This instrument is attached to your institution."
             />
             <div className="fields-grid">
               <Field label="Institution" required>
@@ -1243,7 +1415,6 @@ function Registration({ institutionId, onDone, onExtracted }: { institutionId: s
           <Panel>
             <PanelHeading
               title="Bank & instrument details"
-              detail="Enter known details now or extract text first and complete missing values during review."
             />
             <div className="fields-grid">
               <Field label="Bank name" required>
@@ -1276,16 +1447,9 @@ function Registration({ institutionId, onDone, onExtracted }: { institutionId: s
                 <input type="date" name="validUntil" />
               </Field>
             </div>
-            <small className="field-note">
-              Reminder thresholds and date rules in this prototype are sample workflow values, not
-              regulatory guidance.
-            </small>
           </Panel>
           <Panel>
-            <PanelHeading
-              title="Supporting document"
-              detail="Use a clearly synthetic sample document only. Do not select real financial documents or personal information."
-            />
+            <PanelHeading title="Supporting document" detail="Upload a PDF, JPEG or PNG to extract its text." />
             <label className={`upload-well ${file ? 'upload-done' : ''}`}>
               <input
                 type="file"
@@ -1294,37 +1458,19 @@ function Registration({ institutionId, onDone, onExtracted }: { institutionId: s
               />
               <span>{file ? '✓' : '↥'}</span>
               <strong>{file?.name || 'Drop your document here, or browse'}</strong>
-              <small>Synthetic sample only · file is uploaded securely for text extraction · PDF, JPEG or PNG up to 25 MiB</small>
+              <small>PDF, JPEG or PNG · up to 25 MiB</small>
             </label>
           </Panel>
+          <div className="form-buttons">
+            <Button kind="secondary" type="button" onClick={() => void saveDraft()} disabled={busy}>
+              {busyAction === 'draft' ? 'Saving draft…' : 'Save draft'}
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busyAction === 'upload' ? 'Uploading & extracting…' : 'Upload & extract text'}
+            </Button>
+            {message && <div className={`inline-message ${draft ? 'message-ok' : ''}`} role={draft ? 'status' : 'alert'} aria-live="polite">{message}</div>}
+          </div>
         </div>
-        <aside className="form-aside">
-          <Panel>
-            <span className="aside-emblem">◇</span>
-            <h3>Before you submit</h3>
-            <ul>
-              <li>Check the instrument reference and deposit amount.</li>
-              <li>Use dates shown on the synthetic sample fixture.</li>
-              <li>Attach a clear supporting document.</li>
-            </ul>
-            <div className="next-step">
-              <i />
-              <span>
-                <strong>Next step</strong>
-                <small>Document extraction and official scrutiny</small>
-              </span>
-            </div>
-            <div className="form-buttons">
-              <Button kind="secondary" type="button" onClick={() => void saveDraft()} disabled={busy}>
-                {busyAction === 'draft' ? 'Saving draft…' : 'Save draft'}
-              </Button>
-              <Button type="submit" disabled={busy}>
-                {busyAction === 'upload' ? 'Uploading & extracting…' : <>Upload &amp; extract text <Arrow /></>}
-              </Button>
-              {message && <div className={`inline-message ${draft ? 'message-ok' : ''}`} role={draft ? 'status' : 'alert'} aria-live="polite">{message}</div>}
-            </div>
-          </Panel>
-        </aside>
       </form>
     </>
   );
@@ -1780,7 +1926,7 @@ function ReviewConsole({ onDone }: { onDone: (message: string) => void }) {
                 {item.bank} · {item.amountLabel}
               </span>
               <footer>
-                <span className="avatar avatar-tiny">DO</span> Submitted by Demo Institution Operator <Arrow />
+                <span className="avatar avatar-tiny">MS</span> Submitted by Manjeet Singh <Arrow />
               </footer>
             </button>
           ))}
@@ -1837,7 +1983,7 @@ function ReviewConsole({ onDone }: { onDone: (message: string) => void }) {
               <span>▤</span>
               <div>
                 <strong>FDR scan · customer-copy.pdf</strong>
-                <small>Synthetic PDF · uploaded by Demo Institution Operator · OCR complete</small>
+                <small>Synthetic PDF · uploaded by Manjeet Singh · OCR complete</small>
               </div>
               <button onClick={() => onDone('Opened the fictional supporting-document preview.')}>
                 View document <Arrow />
@@ -1893,7 +2039,7 @@ function Verification({ institutionId, roles }: { institutionId: string; roles: 
   const [loading, setLoading] = useState(true);
   const [busyInstrumentId, setBusyInstrumentId] = useState('');
   const [error, setError] = useState('');
-  const canInitiate = roles.includes('institution_operator') || roles.includes('institution_admin');
+  const canInitiate = permissionsFor(roles).has('verification:run');
   useEffect(() => {
     let active = true;
     Promise.all([getVerificationInstruments(institutionId), getVerificationAttempts(institutionId)])
@@ -1953,7 +2099,7 @@ function Verification({ institutionId, roles }: { institutionId: string; roles: 
   );
 }
 
-function Compliance({ go }: { go: (page: Screen) => void }) {
+function Compliance({ go, roles }: { go: (page: Screen) => void; roles: string[] }) {
   const [reminders, setReminders] = useState(true);
   const [lead, setLead] = useState(30);
   const [saved, setSaved] = useState(false);
@@ -1962,29 +2108,21 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
     scheduleFilter === 'All instruments' ||
     (scheduleFilter === 'Upcoming' ? record.daysToMaturity >= 0 : record.daysToMaturity < 0),
   );
+  const rolePermissions = permissionsFor(roles);
+  const canManagePolicy = rolePermissions.has('compliance:manage');
+  const canOpenRelease = rolePermissions.has('release:read');
   return (
     <>
       <PageTitle
         overline="PORTFOLIO MONITORING"
         title="Maturity & compliance"
         description="Track instrument dates, overdue follow-up, and renewal or replacement progress."
-        action={
+        action={canOpenRelease ? (
           <Button kind="secondary" onClick={() => go('release')}>
             Open action queue <Arrow />
           </Button>
-        }
+        ) : undefined}
       />
-      <div className="policy-notice">
-        <span>i</span>
-        <div>
-          <strong>Configurable demo policy</strong>
-          <p>
-            Reminder intervals and escalation labels are sample settings only. No regulatory
-            threshold is assumed.
-          </p>
-        </div>
-        <Tag tone="lilac">Rule set DEMO-01</Tag>
-      </div>
       <div className="compliance-metrics">
         <div>
           <b className="c-icon gold">◷</b>
@@ -2081,6 +2219,7 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
               aria-checked={reminders}
               onClick={() => setReminders(!reminders)}
               aria-label="Maturity reminders"
+              disabled={!canManagePolicy}
             >
               <i />
             </button>
@@ -2096,6 +2235,7 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
               max="90"
               value={lead}
               id="lead-time"
+              disabled={!canManagePolicy}
               onChange={(e) => {
                 setLead(Number(e.target.value));
                 setSaved(false);
@@ -2113,16 +2253,14 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
               <small>Overdue sample is marked for admin attention.</small>
             </div>
           </div>
-          <Button kind="secondary" onClick={() => setSaved(true)}>
-            {saved ? 'Saved for demo ✓' : 'Save configuration'}
-          </Button>
+          {canManagePolicy ? <Button kind="secondary" onClick={() => setSaved(true)}>{saved ? 'Saved for demo ✓' : 'Save configuration'}</Button> : <small className="readonly-access-note">Institution administrator access is required to change reminder settings.</small>}
         </Panel>
       </div>
     </>
   );
 }
 
-function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
+function ReleaseRequests({ onDone, roles }: { onDone: (message: string) => void; roles: string[] }) {
   const releaseInstrument = fdrRecords.find((item) => item.reference === 'FDR-2024-220') ?? fdrRecords[2]!;
   const [creating, setCreating] = useState(false);
   const [reason, setReason] = useState('');
@@ -2131,6 +2269,10 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
   const [completion, setCompletion] = useState('');
   const [status, setStatus] = useState('Under scrutiny');
   const [error, setError] = useState('');
+  const rolePermissions = permissionsFor(roles);
+  const canRequest = rolePermissions.has('release:request');
+  const canReview = rolePermissions.has('release:review') || roles.includes('institution_admin');
+  const canComplete = canRequest;
   const request = (event: FormEvent) => {
     event.preventDefault();
     if (!reason.trim() || !file) {
@@ -2165,15 +2307,8 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
         overline="POST-MATURITY WORKFLOW"
         title="Release & refund requests"
         description="Create requests, review supporting evidence, and record processing completion separately."
-        action={<Button onClick={() => setCreating(!creating)}>＋ &nbsp;New request</Button>}
+        action={canRequest ? <Button onClick={() => setCreating(!creating)}>＋ &nbsp;New request</Button> : undefined}
       />
-      <div className="release-notice">
-        <span>i</span>
-        <p>
-          <strong>Approval is not a refund.</strong> Administrative approval authorizes the next
-          step only. Actual processing needs separate evidence or an authorized status update.
-        </p>
-      </div>
       {creating && (
         <Panel className="create-request">
           <PanelHeading
@@ -2273,7 +2408,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
               </div>
               <div>
                 <small>Requestor</small>
-                <strong>Demo Institution Operator</strong>
+                <strong>Manjeet Singh</strong>
               </div>
             </div>
             <div className="supporting-file">
@@ -2286,6 +2421,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
                 View <Arrow />
               </button>
             </div>
+            {canReview && <>
             <label className="field-label" htmlFor="release-observation">
               Scrutiny observations
             </label>
@@ -2305,13 +2441,14 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
               </Button>
               <Button onClick={() => decide('Approved')}>Authorize release ✓</Button>
             </div>
+            </>}
             <div className="decision-history">
               <strong>Decision history</strong>
               <div>
                 <i className="timeline-done" />
                 <span>
                   <b>Request submitted</b>
-                  <small>22 Oct 2026 · Demo Institution Operator</small>
+                  <small>22 Oct 2026 · Manjeet Singh</small>
                 </span>
               </div>
               <div>
@@ -2328,7 +2465,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
             </div>
           </div>
         </Panel>
-        <Panel className="processing-panel">
+        {canComplete && <Panel className="processing-panel">
           <span className="processing-mark">▣</span>
           <h2>Processing record</h2>
           <p>Record actual completion only when authorized evidence is available.</p>
@@ -2359,10 +2496,86 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
             evidence-backed update.
           </div>
           {error && <div className="alert alert-error">{error}</div>}
-        </Panel>
+        </Panel>}
       </div>
     </>
   );
+}
+
+function UserManagement({ institutionId }: { institutionId: string }) {
+  const [users, setUsers] = useState<InstitutionUser[]>([]);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<InstitutionRole>('official_reviewer');
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [createdEmail, setCreatedEmail] = useState('');
+  const [drafts, setDrafts] = useState<Record<string, { roles: InstitutionRole[]; status: 'active' | 'suspended' }>>({});
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [busyUserId, setBusyUserId] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const roleOptions: { value: InstitutionRole; label: string }[] = [
+    { value: 'institution_admin', label: 'Institution administrator' },
+    { value: 'institution_operator', label: 'Institution operator' },
+    { value: 'official_reviewer', label: 'Official reviewer' },
+    { value: 'auditor', label: 'Auditor' },
+  ];
+  const loadUsers = async () => {
+    try {
+      const list = await getInstitutionUsers(institutionId);
+      setUsers(list);
+      setDrafts(Object.fromEntries(list.map((user) => [user.id, { roles: user.roles, status: user.status }])));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load accounts.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void loadUsers(); }, [institutionId]);
+  const createUser = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError(''); setNotice(''); setTemporaryPassword('');
+    try {
+      const created = await createInstitutionUser(institutionId, { email, displayName: name, role });
+      setUsers((current) => [...current, created.user].sort((a, b) => a.displayName.localeCompare(b.displayName)));
+      setDrafts((current) => ({ ...current, [created.user.id]: { roles: created.user.roles, status: created.user.status } }));
+      setCreatedEmail(created.user.email); setTemporaryPassword(created.temporaryPassword); setEmail(''); setName('');
+      setNotice('Account created. Copy the temporary password now; it will not be shown again.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create this account.'); }
+    finally { setBusy(false); }
+  };
+  const saveAccess = async (user: InstitutionUser) => {
+    const access = drafts[user.id]; if (!access) return;
+    setBusyUserId(user.id); setError(''); setNotice('');
+    try {
+      const updated = await updateInstitutionUserAccess(institutionId, user.id, access);
+      setUsers((current) => current.map((item) => item.id === user.id ? updated : item));
+      setDrafts((current) => ({ ...current, [user.id]: { roles: updated.roles, status: updated.status } }));
+      setNotice(`Access updated for ${updated.displayName}.`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update account access.'); }
+    finally { setBusyUserId(''); }
+  };
+  const changeDraft = (user: InstitutionUser, update: Partial<{ roles: InstitutionRole[]; status: 'active' | 'suspended' }>) => setDrafts((current) => ({ ...current, [user.id]: { ...(current[user.id] ?? { roles: user.roles, status: user.status }), ...update } }));
+  return <>
+    <PageTitle overline="ACCESS CONTROL" title="Users & roles" description="Create institution accounts and assign role-based access." />
+    <Panel className="user-create-panel">
+      <PanelHeading title="Create account" detail="Each new account gets its own one-time temporary password." />
+      <form className="user-create-form" onSubmit={createUser}>
+        <Field label="Full name" required><input value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} /></Field>
+        <Field label="Email / sign-in ID" required><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} /></Field>
+        <Field label="Role" required><select value={role} onChange={(event) => setRole(event.target.value as InstitutionRole)}>{roleOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+        <Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</Button>
+      </form>
+      {temporaryPassword && <div className="temporary-credential" role="status"><strong>Temporary sign-in for {createdEmail}</strong><code>{temporaryPassword}</code><small>Copy this password and share it securely with the account owner.</small></div>}
+      {notice && <div className="inline-message message-ok" role="status">{notice}</div>}
+      {error && <div className="inline-message" role="alert">{error}</div>}
+    </Panel>
+    <Panel className="user-list-panel">
+      <PanelHeading title="Institution accounts" detail="Role changes and account suspensions are audited." />
+      {loading ? <div className="dashboard-state">Loading accounts…</div> : <div className="table-scroll"><table className="data-table user-access-table"><thead><tr><th>USER</th><th>ROLE ASSIGNMENTS</th><th>STATUS</th><th></th></tr></thead><tbody>{users.map((user) => {
+        const draft = drafts[user.id] ?? { roles: user.roles, status: user.status };
+        return <tr key={user.id}><td><strong>{user.displayName}</strong><small>{user.email}</small><code>{user.id}</code></td><td><select multiple size={4} value={draft.roles} aria-label={`Roles for ${user.email}`} onChange={(event) => changeDraft(user, { roles: Array.from(event.target.selectedOptions, (option) => option.value as InstitutionRole) })}>{roleOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></td><td><select value={draft.status} aria-label={`Status for ${user.email}`} onChange={(event) => changeDraft(user, { status: event.target.value as 'active' | 'suspended' })}><option value="active">Active</option><option value="suspended">Suspended</option></select></td><td><Button kind="secondary" disabled={busyUserId === user.id} onClick={() => void saveAccess(user)}>{busyUserId === user.id ? 'Saving…' : 'Save access'}</Button></td></tr>;
+      })}{users.length === 0 && <tr><td colSpan={4}>No accounts found.</td></tr>}</tbody></table></div>}
+      <small className="user-password-note">Existing passwords cannot be read or displayed. Passwords for new accounts are shown once at creation.</small>
+    </Panel>
+  </>;
 }
 
 function AuditReports() {
@@ -2405,23 +2618,6 @@ function AuditReports() {
           </Button>
         }
       />
-      <div className="audit-highlights">
-        <div>
-          <b>▣</b>
-          <strong>{auditEvents.length}</strong>
-          <small>Recorded demo events</small>
-        </div>
-        <div>
-          <b>◇</b>
-          <strong>Append-only</strong>
-          <small>Illustrative event history</small>
-        </div>
-        <div>
-          <b>◷</b>
-          <strong>24 Oct 2026</strong>
-          <small>Latest sample event</small>
-        </div>
-      </div>
       <Panel className="audit-panel">
         <div className="audit-toolbar">
           <div>

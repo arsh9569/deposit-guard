@@ -16,6 +16,8 @@ const envSchema = z.object({
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   SMTP_USER: z.string().email().optional(),
   SMTP_APP_PASSWORD: z.string().min(1).optional(),
+  OPENAI_API_KEY: z.string().trim().optional(),
+  OPENAI_MODEL: z.string().trim().min(1).default('gpt-6-astra'),
 });
 
 export const env = envSchema.parse(process.env);
