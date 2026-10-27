@@ -19,4 +19,11 @@ export const userRepository: AuthRepository = {
   async updateLastLogin(id, date): Promise<void> {
     await users.updateOne({ _id: id, status: 'active' }, { $set: { lastLoginAt: date } }).exec();
   },
+  async updateDisplayName(id, displayName): Promise<AuthUser | null> {
+    return (await users.findOneAndUpdate(
+      { _id: id, status: 'active' },
+      { $set: { displayName } },
+      { new: true, runValidators: true },
+    ).lean().exec()) as AuthUser | null;
+  },
 };

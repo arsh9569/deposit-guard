@@ -1,6 +1,6 @@
 /* AICTE login only: dashboard and all other screens retain their existing styles. */
-.aicte-login { min-height:100vh; display:grid; grid-template-columns: 54% 46%; font-family:Arial,Helvetica,sans-serif; background:#f3f5f8; color:#17283e; }
-.aicte-hero { position:relative; display:flex; flex-direction:column; justify-content:space-between; padding:clamp(28px,4vw,65px); color:#fff; background:linear-gradient(115deg,rgba(8,35,67,.95),rgba(15,55,91,.76)),url('/aicte-campus.jpg') center/cover no-repeat; overflow:hidden; }
+.aicte-login { min-height:100vh; display:grid; grid-template-columns: 54% 46%; font-family:var(--font-sans); font-size:var(--type-body); line-height:1.5; background:#f3f5f8; color:#17283e; }
+.aicte-hero { position:relative; display:flex; flex-direction:column; justify-content:space-between; padding:clamp(28px,4vw,65px); color:#fff; background:linear-gradient(135deg,#082343,#174d78 58%,#1b6177); overflow:hidden; }
 .aicte-hero::after {content:'';position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,20,43,.45),transparent 60%);pointer-events:none;}
 .aicte-hero > * {position:relative;z-index:1;}
 .aicte-identity {display:flex;align-items:center;gap:13px;}
@@ -16,10 +16,10 @@
 .aicte-hero-footer {font-size:11px;letter-spacing:1.5px;color:#c0d4e8;}
 .aicte-access {display:flex;align-items:center;justify-content:center;padding:32px 24px;}
 .aicte-card {width:min(100%,410px);background:white;padding:36px 34px;border-radius:9px;box-shadow:0 15px 48px rgba(18,38,68,.14);display:flex;flex-direction:column;}
-.aicte-card h2 {font-size:27px;margin:0 0 5px;color:#1c304b;}
+.aicte-card h2 {font-size:var(--type-section-title);line-height:1.25;margin:0 0 5px;color:#1c304b;}
 .aicte-intro {font-size:13px;color:#728093;margin:0 0 25px;}
-.aicte-card > label {font-size:12px;font-weight:700;color:#34465b;margin:0 0 7px;}
-.aicte-card > input,.aicte-card > select,.aicte-password-wrap input {width:100%;height:44px;box-sizing:border-box;border:1px solid #dce3ec;border-radius:5px;background:#fff;color:#1c304b;padding:0 12px;font-size:13px;outline-offset:2px;}
+.aicte-card > label {font-size:var(--type-control);font-weight:700;color:#34465b;margin:0 0 7px;}
+.aicte-card > input,.aicte-card > select,.aicte-password-wrap input {width:100%;height:44px;box-sizing:border-box;border:1px solid #dce3ec;border-radius:5px;background:#fff;color:#1c304b;padding:0 12px;font-size:var(--type-control);outline-offset:2px;}
 .aicte-card > input,.aicte-card > select,.aicte-password-wrap {margin-bottom:18px;}
 .aicte-password-wrap {position:relative;}
 .aicte-password-wrap input {padding-right:65px;}
@@ -28,9 +28,10 @@
 .aicte-remember {display:flex;align-items:center;gap:6px;cursor:pointer;color:#5d6b7d;}
 .aicte-remember input {accent-color:#214d88;}
 .aicte-link {background:none;border:0;color:#245a9b;font-size:12px;cursor:pointer;padding:0;}
-.aicte-submit {height:46px;background:#1b477e;color:white;border:0;border-radius:5px;font-size:14px;font-weight:700;cursor:pointer;}
+.aicte-submit {height:46px;background:#1b477e;color:white;border:0;border-radius:5px;font-size:var(--type-control);font-weight:700;cursor:pointer;}
 .aicte-submit:hover {background:#143765;}
 .aicte-submit:disabled {opacity:.6;cursor:wait;}
 .aicte-help {font-size:11px;color:#8994a4;text-align:center;line-height:1.6;margin:17px 0 0;}
 .aicte-alert {padding:10px 12px;background:#fff1f0;color:#a12b25;border:1px solid #f5c9c6;border-radius:5px;font-size:12px;margin-bottom:16px;}
 @media(max-width:760px) {.aicte-login{grid-template-columns:1fr}.aicte-hero{min-height:300px;padding:28px}.aicte-hero-body{margin:35px 0}.aicte-hero-body h1{font-size:34px}.aicte-hero-body p{font-size:14px}.aicte-hero-body ul{display:none}.aicte-access{padding:24px 16px}.aicte-card{padding:28px 22px}}
+@media(max-width:380px) {.aicte-form-options{align-items:flex-start;flex-direction:column}.aicte-hero{min-height:260px}.aicte-hero-footer{font-size:9px;letter-spacing:1px}}

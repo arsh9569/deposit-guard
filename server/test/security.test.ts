@@ -47,6 +47,12 @@ function makeRepository(): AuthRepository {
       return users.find((user) => String(user._id) === id) ?? null;
     },
     async updateLastLogin() {},
+    async updateDisplayName(id, displayName) {
+      const user = users.find((candidate) => String(candidate._id) === id);
+      if (!user) return null;
+      user.displayName = displayName;
+      return user;
+    },
   };
 }
 
@@ -98,12 +104,24 @@ test('password helper enforces its baseline and verifies a one-way bcrypt hash',
   assert.equal(await verifyPassword('wrong-password', encoded), false);
 });
 
-async function login(agent: ReturnType<typeof request.agent>, email: string) {
+async function login(
+  agent: ReturnType<typeof request.agent>,
+  email: string
+) {
   const csrf = await agent.get('/api/auth/csrf');
-  return agent
+
+  const response = await agent
     .post('/api/auth/login')
     .set('x-csrf-token', csrf.body.csrfToken as string)
     .send({ email, password });
+
+  assert.equal(
+    response.status,
+    200,
+    `Login failed: ${JSON.stringify(response.body)}`
+  );
+
+  return response;
 }
 
 test('unauthenticated request is denied', async () => {
@@ -162,10 +180,14 @@ test('unauthorized institution reviewer cannot retrieve private FDR documents', 
 });
 
 test('session expiration results in unauthenticated response', async () => {
-  const agent = request.agent(makeApp(25));
+  const agent = request.agent(makeApp(1000));
+
   await login(agent, users[0]!.email);
-  await new Promise((resolve) => setTimeout(resolve, 60));
+
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
   const response = await agent.get('/api/auth/me');
+
   assert.equal(response.status, 401);
 });
 

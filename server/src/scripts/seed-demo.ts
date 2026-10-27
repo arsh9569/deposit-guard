@@ -26,56 +26,98 @@ const demoIds = {
   predecessor: id('d600000000000000000104'), replacement: id('d600000000000000000105'), release: id('d600000000000000000106'),
   match: id('d600000000000000000107'), simulatedMismatch: id('d600000000000000000108'),
   notFound: id('d600000000000000000109'), unavailable: id('d600000000000000000110'),
+  demo01: id('d600000000000000000111'), demo02: id('d600000000000000000112'), demo03: id('d600000000000000000113'),
+  demo04: id('d600000000000000000114'), demo05: id('d600000000000000000115'), demo06: id('d600000000000000000116'),
+  demo07: id('d600000000000000000117'), demo08: id('d600000000000000000118'), demo09: id('d600000000000000000119'),
+  demo10: id('d600000000000000000120'), demo11: id('d600000000000000000121'), demo12: id('d600000000000000000122'),
+  demo13: id('d600000000000000000123'), demo14: id('d600000000000000000124'), demo15: id('d600000000000000000125'),
 };
 const documentIds = { valid: id('d600000000000000000201'), mismatch: id('d600000000000000000202'), release: id('d600000000000000000203') };
 const extractionIds = { mismatch: id('d600000000000000000301') };
 const releaseId = id('d600000000000000000401');
+const secondReleaseId = id('d600000000000000000403');
+const thirdReleaseId = id('d600000000000000000404');
 const renewalId = id('d600000000000000000402');
+const secondRenewalId = id('d600000000000000000405');
 const day = (offset: number) => { const d = new Date(); d.setUTCHours(0, 0, 0, 0); d.setUTCDate(d.getUTCDate() + offset); return d; };
 try {
   await connectDatabase();
-  await seedUpsert(InstitutionModel as unknown as Model<Record<string, unknown>>, { _id: institutionId }, { $set: { name: 'Northbridge Institute of Technology', shortName: 'Northbridge Institute', externalReference: 'DEMO-NORTHBRIDGE-001', status: 'active', timezone: 'Asia/Kolkata', configuredRules: [] } });
+  await seedUpsert(InstitutionModel as unknown as Model<Record<string, unknown>>, { _id: institutionId }, { $set: { name: 'Northbridge Synthetic Institute', shortName: 'Northbridge Demo Institute', externalReference: 'DEMO-NORTHBRIDGE-001', status: 'active', timezone: 'Asia/Kolkata', configuredRules: [] } });
   const passwordHash = await hashPassword(demoPassword);
-  await seedUpsert(UserModel as unknown as Model<Record<string, unknown>>, { _id: operatorId }, { $set: { authSubject: 'demo:northbridge:operator', email: 'operator@northbridge.example', displayName: 'Aarav Mehta', status: 'active', passwordHash, memberships: [{ institutionId, roles: ['institution_operator'], active: true }] } });
-  await seedUpsert(UserModel as unknown as Model<Record<string, unknown>>, { _id: reviewerId }, { $set: { authSubject: 'demo:northbridge:reviewer', email: 'reviewer@depositguard.example', displayName: 'Priya Nair', status: 'active', passwordHash, memberships: [{ institutionId, roles: ['official_reviewer'], active: true }] } });
-  await seedUpsert(UserModel as unknown as Model<Record<string, unknown>>, { _id: scenarioReviewerId }, { $set: { authSubject: 'demo:northbridge:scenario-6-reviewer', email: 'scenario6.reviewer@northbridge.example', displayName: 'Scenario 6 Test Reviewer', status: 'active', passwordHash, memberships: [{ institutionId, roles: ['official_reviewer'], active: true }] } });
+  await seedUpsert(UserModel as unknown as Model<Record<string, unknown>>, { _id: operatorId }, { $set: { authSubject: 'demo:northbridge:operator', email: 'operator@northbridge.example', displayName: 'Demo Institution Operator', status: 'active', passwordHash, memberships: [{ institutionId, roles: ['institution_operator'], active: true }] } });
+  await seedUpsert(UserModel as unknown as Model<Record<string, unknown>>, { _id: reviewerId }, { $set: { authSubject: 'demo:northbridge:reviewer', email: 'reviewer@northbridge.example', displayName: 'Demo Official Reviewer', status: 'active', passwordHash, memberships: [{ institutionId, roles: ['official_reviewer'], active: true }] } });
+  await seedUpsert(UserModel as unknown as Model<Record<string, unknown>>, { _id: scenarioReviewerId }, { $set: { authSubject: 'demo:northbridge:scenario-6-reviewer', email: 'scenario-reviewer@northbridge.example', displayName: 'Scenario Demo Reviewer', status: 'active', passwordHash, memberships: [{ institutionId, roles: ['official_reviewer'], active: true }] } });
 
   const specs = [
-    ['valid', 'FDR-2026-018', 'INSTR-018', 'State Bank of India', '2500000.00', -296, 21, 'submitted', 'pending', 'active'],
-    ['maturity', 'FDR-2026-003', 'INSTR-003', 'ICICI Bank', '1250000.00', -180, 12, 'accepted', 'approved', 'active'],
-    ['predecessor', 'FDR-2024-106', 'INSTR-106', 'Canara Bank', '3200000.00', -750, -12, 'accepted', 'approved', 'superseded'],
-    ['replacement', 'FDR-2025-042', 'INSTR-042', 'HDFC Bank', '3200000.00', -365, 46, 'submitted', 'pending', 'active'],
-    ['release', 'FDR-2024-220', 'INSTR-220', 'Canara Bank', '1800000.00', -700, -5, 'accepted', 'approved', 'matured'],
-    ['match', 'FDR-2026-021', 'INSTR-021', 'Punjab National Bank', '900000.00', -120, 180, 'accepted', 'approved', 'active'],
-    ['simulatedMismatch', 'FDR-2026-022', 'INSTR-022', 'Union Bank of India', '1100000.00', -110, 240, 'accepted', 'approved', 'active'],
-    ['notFound', 'FDR-2026-023', 'INSTR-023', 'Bank of Baroda', '700000.00', -100, 210, 'accepted', 'approved', 'active'],
-    ['unavailable', 'FDR-2026-024', 'INSTR-024', 'Indian Bank', '600000.00', -90, 270, 'accepted', 'approved', 'active'],
+    ['valid', 'FDR-2026-018', 'INSTR-018', 'Northstar Synthetic Bank', '2500000.00', -296, 21, 'submitted', 'pending', 'active'],
+    ['maturity', 'FDR-2026-003', 'INSTR-003', 'Cedarline Demo Bank', '1250000.00', -180, 12, 'accepted', 'approved', 'active'],
+    ['predecessor', 'FDR-2024-106', 'INSTR-106', 'Blue Meadow Synthetic Bank', '3200000.00', -750, -12, 'accepted', 'approved', 'superseded'],
+    ['replacement', 'FDR-2025-042', 'INSTR-042', 'Willow Demo Bank', '3200000.00', -365, 46, 'submitted', 'pending', 'active'],
+    ['release', 'FDR-2024-220', 'INSTR-220', 'Blue Meadow Synthetic Bank', '1800000.00', -700, -5, 'accepted', 'approved', 'matured'],
+    ['match', 'FDR-2026-021', 'INSTR-021', 'Juniper Cooperative Bank', '900000.00', -120, 180, 'accepted', 'approved', 'active'],
+    ['simulatedMismatch', 'FDR-2026-022', 'INSTR-022', 'Brightwater Demo Bank', '1100000.00', -110, 240, 'accepted', 'approved', 'active'],
+    ['notFound', 'FDR-2026-023', 'INSTR-023', 'Silver Fern Synthetic Bank', '700000.00', -100, 210, 'accepted', 'approved', 'active'],
+    ['unavailable', 'FDR-2026-024', 'INSTR-024', 'Maple Harbor Demo Bank', '600000.00', -90, 270, 'accepted', 'approved', 'active'],
+    ['demo01', 'FDR-DEMO-001', 'SYN-001', 'Juniper Cooperative Bank', '1450000.00', -240, 310, 'accepted', 'approved', 'active'],
+    ['demo02', 'FDR-DEMO-002', 'SYN-002', 'Willow Demo Bank', '2750000.00', -85, 280, 'submitted', 'pending', 'active'],
+    ['demo03', 'FDR-DEMO-003', 'SYN-003', 'Cedarline Demo Bank', '980000.00', -110, 75, 'submitted', 'pending', 'active'],
+    ['demo04', 'FDR-DEMO-004', 'SYN-004', 'Northstar Synthetic Bank', '2125000.00', -350, 7, 'accepted', 'approved', 'active'],
+    ['demo05', 'FDR-DEMO-005', 'SYN-005', 'Blue Meadow Synthetic Bank', '1650000.00', -540, -3, 'accepted', 'approved', 'matured'],
+    ['demo06', 'FDR-DEMO-006', 'SYN-006', 'Silver Fern Synthetic Bank', '3200000.00', -30, 335, 'accepted', 'approved', 'active'],
+    ['demo07', 'FDR-DEMO-007', 'SYN-007', 'Maple Harbor Demo Bank', '3200000.00', -500, -20, 'accepted', 'approved', 'superseded'],
+    ['demo08', 'FDR-DEMO-008', 'SYN-008', 'Brightwater Demo Bank', '875000.00', -95, 270, 'accepted', 'approved', 'active'],
+    ['demo09', 'FDR-DEMO-009', 'SYN-009', 'Juniper Cooperative Bank', '1175000.00', -70, 295, 'accepted', 'approved', 'active'],
+    ['demo10', 'FDR-DEMO-010', 'SYN-010', 'Cedarline Demo Bank', '4500000.00', -160, 205, 'accepted', 'approved', 'active'],
+    ['demo11', 'FDR-DEMO-011', 'SYN-011', 'Willow Demo Bank', '725000.00', -95, 55, 'submitted', 'pending', 'active'],
+    ['demo12', 'FDR-DEMO-012', 'SYN-012', 'Northstar Synthetic Bank', '2350000.00', -18, 347, 'accepted', 'approved', 'active'],
+    ['demo13', 'FDR-DEMO-013', 'SYN-013', 'Silver Fern Synthetic Bank', '1925000.00', -620, -45, 'accepted', 'approved', 'matured'],
+    ['demo14', 'FDR-DEMO-014', 'SYN-014', 'Blue Meadow Synthetic Bank', '5600000.00', -45, 685, 'accepted', 'approved', 'active'],
+    ['demo15', 'FDR-DEMO-015', 'SYN-015', 'Maple Harbor Demo Bank', '1325000.00', -330, 28, 'accepted', 'approved', 'active'],
   ] as const;
-  for (const [key, reference, instrumentNumber, bankName, amount, issueOffset, maturityOffset, submissionStatus, reviewStatus, instrumentState] of specs) {
+  const uniqueReferences = new Set(specs.map(([, reference]) => reference));
+  if (specs.length < 20 || specs.length > 50 || uniqueReferences.size !== specs.length) {
+    throw new Error(`Demo FDR fixture must contain 20–50 unique records; found ${specs.length}.`);
+  }
+  const generatedDocumentIds = new Map<string, Types.ObjectId>();
+  for (const [index, [key, reference, instrumentNumber, bankName, amount, issueOffset, maturityOffset, submissionStatus, reviewStatus, instrumentState]] of specs.entries()) {
     const recordId = demoIds[key];
-    const docs = key === 'valid' ? [documentIds.valid, documentIds.mismatch] : key === 'release' ? [documentIds.release] : [];
-    const fields = { reference, instrumentNumber, bankName, branchName: 'Main Branch', holderName: 'Northbridge Institute of Technology', principalAmount: Types.Decimal128.fromString(amount), currency: 'INR', issueDate: day(issueOffset), maturityDate: day(maturityOffset), documentIds: docs, supersededByInstrumentIds: key === 'predecessor' ? [demoIds.replacement] : [], ...(key === 'replacement' ? { supersedesInstrumentId: demoIds.predecessor, sourceRenewalId: renewalId } : {}), dataRevision: 1, submissionStatus, ocrStatus: key === 'valid' ? 'complete' : 'not_requested', reviewStatus, verificationStatus: 'not_requested', instrumentState, complianceState: maturityOffset < 0 ? 'overdue_action' : maturityOffset <= 30 ? 'upcoming_action' : 'current', createdBy: operatorId };
+    const generatedDocumentId = id(String(220 + index));
+    generatedDocumentIds.set(key, generatedDocumentId);
+    const docs = key === 'valid' ? [documentIds.valid, documentIds.mismatch] : key === 'release' ? [documentIds.release] : [generatedDocumentId];
+    const fields = { reference, instrumentNumber, bankName, branchName: 'Demo Branch', holderName: 'Northbridge Synthetic Institute', principalAmount: Types.Decimal128.fromString(amount), currency: 'INR', issueDate: day(issueOffset), maturityDate: day(maturityOffset), documentIds: docs, supersededByInstrumentIds: key === 'predecessor' ? [demoIds.replacement] : key === 'demo07' ? [demoIds.demo06] : [], ...(key === 'replacement' ? { supersedesInstrumentId: demoIds.predecessor, sourceRenewalId: renewalId } : key === 'demo06' ? { supersedesInstrumentId: demoIds.demo07, sourceRenewalId: secondRenewalId } : {}), dataRevision: 1, submissionStatus, ocrStatus: key === 'valid' || key === 'demo03' ? 'complete' : 'not_requested', reviewStatus, verificationStatus: 'not_requested', instrumentState, complianceState: maturityOffset < 0 ? 'overdue_action' : maturityOffset <= 30 ? 'upcoming_action' : 'current', createdBy: operatorId };
     await seedUpsert(FdrModel as unknown as Model<Record<string, unknown>>, { _id: recordId }, { $set: { institutionId, ...fields } });
   }
 
   const storageRoot = path.resolve(process.env.DOCUMENT_STORAGE_DIR ?? path.join(process.cwd(), '.private-documents'));
   await mkdir(storageRoot, { recursive: true, mode: 0o700 });
-  const docs = [
-    { _id: documentIds.valid, instrumentId: demoIds.valid, ref: 'FDR-2026-018', amount: '2500000.00', maturity: day(21), bank: 'State Bank of India' },
-    { _id: documentIds.mismatch, instrumentId: demoIds.mismatch, ref: 'FDR-2026-018', amount: '2450000.00', maturity: day(21), bank: 'State Bank of India' },
-    { _id: documentIds.release, instrumentId: demoIds.release, ref: 'FDR-2024-220', amount: '1800000.00', maturity: day(-5), bank: 'Canara Bank' },
+  const documentSpecs = [
+    { _id: documentIds.valid, instrumentId: demoIds.valid, ref: 'FDR-2026-018', amount: '2500000.00', maturity: day(21), bank: 'Northstar Synthetic Bank' },
+    { _id: documentIds.mismatch, instrumentId: demoIds.mismatch, ref: 'FDR-2026-018', amount: '2450000.00', maturity: day(21), bank: 'Northstar Synthetic Bank' },
+    { _id: documentIds.release, instrumentId: demoIds.release, ref: 'FDR-2024-220', amount: '1800000.00', maturity: day(-5), bank: 'Blue Meadow Synthetic Bank' },
+    ...specs.flatMap(([key, ref, , bank, amount, , maturityOffset]) => {
+      if (key === 'valid' || key === 'release') return [];
+      return [{ _id: generatedDocumentIds.get(key)!, instrumentId: demoIds[key], ref, amount: key === 'demo03' ? '930000.00' : amount, maturity: day(maturityOffset), bank }];
+    }),
   ];
-  for (const doc of docs) {
+  for (const doc of documentSpecs) {
     const bytes = createDemoFdrPdf(doc.ref, doc.amount, doc.maturity.toISOString().slice(0, 10), doc.bank);
     const storageKey = `demo-${doc._id.toString()}.pdf`;
     await writeFile(path.join(storageRoot, storageKey), bytes, { mode: 0o600 });
-    await seedUpsert(DocumentModel as unknown as Model<Record<string, unknown>>, { _id: doc._id }, { $set: { institutionId, instrumentId: doc.instrumentId, uploadedBy: operatorId, originalFileName: `${doc.ref}.pdf`, storageKey, contentType: 'application/pdf', byteLength: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), purpose: doc._id.equals(documentIds.release) ? 'release_evidence' : 'fdr_instrument', malwareScanStatus: 'clean', retentionState: 'active' } });
+    await seedUpsert(DocumentModel as unknown as Model<Record<string, unknown>>, { _id: doc._id }, { $set: { institutionId, instrumentId: doc.instrumentId, uploadedBy: operatorId, originalFileName: `SYNTHETIC-DEMO-${doc.ref}.pdf`, storageKey, contentType: 'application/pdf', byteLength: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'), purpose: doc._id.equals(documentIds.release) ? 'release_evidence' : 'fdr_instrument', malwareScanStatus: 'clean', retentionState: 'active' } });
   }
-  const rawMismatch = { text: 'FDR Reference: FDR-2026-018\nBank Name: State Bank of India\nPrincipal Amount: INR 2450000.00', fields: { principalAmount: { value: '2450000.00', confidence: 0.96 } } };
-  await seedUpsert(OcrExtractionModel as unknown as Model<Record<string, unknown>>, { _id: extractionIds.mismatch }, { $set: { institutionId, documentId: documentIds.mismatch, instrumentId: demoIds.mismatch, provider: 'deterministic-demo-pdf-text', providerVersion: '1', status: 'complete', fields: [{ fieldName: 'reference', value: 'FDR-2026-018', confidence: 0.99 }, { fieldName: 'bankName', value: 'State Bank of India', confidence: 0.97 }, { fieldName: 'principalAmount', value: '2450000.00', confidence: 0.96 }, { fieldName: 'issueDate', value: day(-296).toISOString().slice(0, 10), confidence: 0.95 }, { fieldName: 'maturityDate', value: day(21).toISOString().slice(0, 10), confidence: 0.95 }], rawResult: rawMismatch, completedAt: new Date() } });
+  const rawMismatch = { text: 'SYNTHETIC DEMO ONLY - NOT A FINANCIAL DOCUMENT\nFDR Reference: FDR-2026-018\nBank Name: Northstar Synthetic Bank\nPrincipal Amount: INR 2450000.00', fields: { principalAmount: { value: '2450000.00', confidence: 0.96 } } };
+  await seedUpsert(OcrExtractionModel as unknown as Model<Record<string, unknown>>, { _id: extractionIds.mismatch }, { $set: { institutionId, documentId: documentIds.mismatch, instrumentId: demoIds.mismatch, provider: 'deterministic-demo-pdf-text', providerVersion: '1', status: 'complete', fields: [{ fieldName: 'reference', value: 'FDR-2026-018', confidence: 0.99 }, { fieldName: 'bankName', value: 'Northstar Synthetic Bank', confidence: 0.97 }, { fieldName: 'principalAmount', value: '2450000.00', confidence: 0.96 }, { fieldName: 'issueDate', value: day(-296).toISOString().slice(0, 10), confidence: 0.95 }, { fieldName: 'maturityDate', value: day(21).toISOString().slice(0, 10), confidence: 0.95 }], rawResult: rawMismatch, completedAt: new Date() } });
+  await seedUpsert(OcrExtractionModel as unknown as Model<Record<string, unknown>>, { _id: id('d600000000000000000302') }, { $set: { institutionId, documentId: generatedDocumentIds.get('demo03'), instrumentId: demoIds.demo03, provider: 'deterministic-demo-pdf-text', providerVersion: '1', status: 'complete', fields: [{ fieldName: 'reference', value: 'FDR-DEMO-003', confidence: 0.99 }, { fieldName: 'bankName', value: 'Cedarline Demo Bank', confidence: 0.97 }, { fieldName: 'principalAmount', value: '930000.00', confidence: 0.82 }, { fieldName: 'issueDate', value: day(-110).toISOString().slice(0, 10), confidence: 0.95 }, { fieldName: 'maturityDate', value: day(75).toISOString().slice(0, 10), confidence: 0.95 }], rawResult: { text: 'SYNTHETIC DEMO ONLY - NOT A FINANCIAL DOCUMENT\nFDR Reference: FDR-DEMO-003\nBank Name: Cedarline Demo Bank\nPrincipal Amount: INR 930000.00', fields: { principalAmount: { value: '930000.00', confidence: 0.82 } } }, completedAt: new Date() } });
 
   await seedUpsert(RenewalRecordModel as unknown as Model<Record<string, unknown>>, { _id: renewalId }, { $set: { institutionId, sourceInstrumentId: demoIds.predecessor, replacementInstrumentId: demoIds.replacement, requestedBy: operatorId, kind: 'replacement', status: 'submitted', reason: 'Synthetic replacement demonstration', supportingDocumentIds: [], history: [{ from: 'pending', to: 'submitted', actorId: operatorId, reason: 'Seeded demonstration replacement', at: new Date() }] } });
+  await seedUpsert(RenewalRecordModel as unknown as Model<Record<string, unknown>>, { _id: secondRenewalId }, { $set: { institutionId, sourceInstrumentId: demoIds.demo07, replacementInstrumentId: demoIds.demo06, requestedBy: operatorId, kind: 'replacement', status: 'completed', reason: 'Synthetic replacement completed', supportingDocumentIds: [generatedDocumentIds.get('demo06')!], history: [{ from: 'submitted', to: 'completed', actorId: reviewerId, reason: 'Synthetic replacement fixture completed', at: new Date() }] } });
   await seedUpsert(ReleaseRequestModel as unknown as Model<Record<string, unknown>>, { _id: releaseId }, { $set: { institutionId, instrumentId: demoIds.release, requestedBy: operatorId, requestType: 'matured_refund', reason: 'Synthetic refund demonstration', supportingDocumentIds: [documentIds.release], status: 'under_review', scrutinyObservations: ['Maturity confirmation attached; authorization pending.'], history: [{ status: 'requested', actorId: operatorId, reason: 'Seeded request', at: new Date() }, { status: 'under_review', actorId: reviewerId, reason: 'Scrutiny started', at: new Date() }] } });
+  for (const [requestId, instrumentId, documentId, reason] of [
+    [secondReleaseId, demoIds.demo05, generatedDocumentIds.get('demo05')!, 'Synthetic maturity refund is awaiting review.'],
+    [thirdReleaseId, demoIds.demo13, generatedDocumentIds.get('demo13')!, 'Synthetic release request is awaiting review.'],
+  ] as const) {
+    await seedUpsert(ReleaseRequestModel as unknown as Model<Record<string, unknown>>, { _id: requestId }, { $set: { institutionId, instrumentId, requestedBy: operatorId, requestType: 'matured_refund', reason, supportingDocumentIds: [documentId], status: 'requested', scrutinyObservations: [], history: [{ status: 'requested', actorId: operatorId, reason: 'Seeded synthetic request', at: new Date() }] } });
+  }
   for (const [key, recordId, status] of [['match', demoIds.match, 'match'], ['mismatch', demoIds.simulatedMismatch, 'mismatch']] as const) {
     await seedUpsert(VerificationAttemptModel as unknown as Model<Record<string, unknown>>, { _id: id(key === 'match' ? 'd600000000000000000501' : 'd600000000000000000502') }, { $set: { institutionId, instrumentId: recordId, requestedBy: operatorId, adapter: 'depositguard-deterministic-mock', mode: 'simulated', status, attemptReference: `SIM-${key.toUpperCase()}-2026`, idempotencyKey: `demo-${key}-2026`, responseSummary: `Deterministic simulated ${key}. Not bank confirmed.`, requestedAt: new Date(), completedAt: new Date() } });
   }
@@ -96,10 +138,10 @@ try {
   console.info('Seeded deterministic DepositGuard demo data.');
   console.info('Institution: DEMO-NORTHBRIDGE-001');
   console.info('Operator: operator@northbridge.example');
-  console.info('Official reviewer: reviewer@depositguard.example');
-  console.info('Scenario reviewer: scenario6.reviewer@northbridge.example');
+  console.info('Official reviewer: reviewer@northbridge.example');
+  console.info('Scenario reviewer: scenario-reviewer@northbridge.example');
   console.info('Password: the value supplied in DEMO_PASSWORD');
-  console.info(`Private PDF fixtures: ${docs.length}; institution FDR scenarios: 7`);
+  console.info(`Private synthetic PDF fixtures: ${documentSpecs.length}; institution FDR records: ${specs.length}`);
 } finally {
   await (await import('mongoose')).default.disconnect();
 }

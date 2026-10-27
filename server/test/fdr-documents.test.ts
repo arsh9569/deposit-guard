@@ -5,6 +5,7 @@ import { Types } from 'mongoose';
 import { compareExtractedValues, findMissingExtractedFields, inspectDocument, isRealIsoDate, MAX_DOCUMENT_BYTES, noProviderExtractor, privateDocumentFilter, sanitizeOriginalFileName, type DocumentExtractor } from '../src/services/fdr-document-processing.js';
 import { fdrCreateSchema, fdrDraftSchema, fdrUpdateSchema } from '../src/validators/model-schemas.js';
 import { createDemoFdrPdf } from '../src/demo/fixtures.js';
+import { shutdownOcrEngine, tesseractDocumentExtractor } from '../src/services/tesseract-ocr.js';
 
 const minimalPdf = (text = '') => Buffer.from(`%PDF-1.7\n${text}\n%%EOF`, 'ascii');
 function crc32(bytes: Buffer) {
@@ -89,6 +90,36 @@ test('pretested demonstration PDF yields deterministic field values without invo
   assert.equal(result.fields.bankName?.value, 'Synthetic National Bank');
   assert.equal(result.fields.principalAmount?.value, '2450000.00');
   assert.equal(result.fields.maturityDate?.value, '2026-11-14');
+});
+
+test('extracts FDR text fields from a Flate-compressed PDF content stream', async () => {
+  const content = Buffer.from('BT (FDR Reference: FDR-COMP-01) Tj (Bank Name: Cedarline Synthetic Bank) Tj (Principal Amount: INR 765432.10) Tj (Maturity Date: 2027-06-30) Tj <466C617368205265666572656E63653A204644522D4845582D3031> Tj ET', 'latin1');
+  const compressed = deflateSync(content);
+  const pdf = Buffer.concat([
+    Buffer.from(`%PDF-1.7\n1 0 obj << /Length ${compressed.length} /Filter /FlateDecode >>\nstream\n`, 'latin1'),
+    compressed,
+    Buffer.from('\nendstream\nendobj\n%%EOF', 'latin1'),
+  ]);
+  const result = await noProviderExtractor.extractPdfText(pdf);
+  assert.match(result.text, /FDR Reference: FDR-COMP-01/);
+  assert.equal(result.fields.reference?.value, 'FDR-COMP-01');
+  assert.equal(result.fields.bankName?.value, 'Cedarline Synthetic Bank');
+  assert.equal(result.fields.principalAmount?.value, '765432.10');
+  assert.equal(result.fields.maturityDate?.value, '2027-06-30');
+  assert.match(result.text, /Flash Reference: FDR-HEX-01/);
+});
+
+test('Tesseract recognizes a scanned PDF and returns text plus parsed FDR fields', async () => {
+  try {
+    const scan = createDemoFdrPdf('FDR-OCR-TEST-007', '1250000.00', '2027-08-31');
+    const result = await tesseractDocumentExtractor.runOcrWithText!(scan, 'application/pdf');
+    assert.match(result.text, /FDR Reference: FDR-OCR-TEST-007/);
+    assert.equal(result.fields.reference?.value, 'FDR-OCR-TEST-007');
+    assert.equal(result.fields.principalAmount?.value, '1250000.00');
+    assert.ok((result.fields.reference?.confidence ?? 0) > 0.5);
+  } finally {
+    await shutdownOcrEngine();
+  }
 });
 
 test('4,50,000 extracted from PDF conflicts with 5,00,000 submitted and an incomplete FDR number is surfaced', async () => {

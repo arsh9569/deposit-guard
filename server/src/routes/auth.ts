@@ -5,7 +5,7 @@ import type { AuthRepository, AuditWriter } from '../auth/types.js';
 import { verifyPassword } from '../auth/passwords.js';
 import { createAuthenticationMiddleware } from '../middleware/authentication.js';
 import { csrfTokenHandler } from '../middleware/csrf.js';
-import { loginSchema } from '../validators/auth-schemas.js';
+import { loginSchema, profileSchema } from '../validators/auth-schemas.js';
 
 
 const genericLoginError = { error: 'Invalid email or password' };
@@ -74,6 +74,30 @@ export function createAuthRouter(
     catch (error) { next(error); }
   });
 
+  router.patch('/profile', authentication, async (request, response, next) => {
+    const parsed = profileSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: 'Username must be between 2 and 80 characters.' });
+      return;
+    }
+    try {
+      const user = await repository.updateDisplayName(String(request.authUser!._id), parsed.data.displayName);
+      if (!user) {
+        response.status(401).json({ error: 'Authentication required' });
+        return;
+      }
+      await audit.write({
+        action: 'authentication.profile.updated',
+        actorId: String(user._id),
+        requestId: request.requestId,
+        metadataRedacted: { field: 'displayName' },
+      });
+      response.json({ user: publicUser(user) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post('/logout', async (request, response, next) => {
     try {
       if (request.session.userId) {
@@ -131,15 +155,23 @@ export function createAuthRouter(
 async function publicUser(
   user: NonNullable<Awaited<ReturnType<AuthRepository['findById']>>>
 ) {
-  const studentProfile = await StudentProfileModel.exists({
-    userId: user._id,
-  });
+  let accountType = user.accountType;
+
+  if (!accountType && user.memberships.length === 0) {
+    const studentProfile = await StudentProfileModel.exists({
+      userId: user._id,
+    });
+
+    if (studentProfile) {
+      accountType = 'student';
+    }
+  }
 
   return {
     id: String(user._id),
     email: user.email,
     displayName: user.displayName,
-    accountType: user.accountType ?? (studentProfile ? 'student' : undefined),
+    accountType,
     status: user.status,
     memberships: user.memberships
       .filter((membership) => membership.active)
@@ -149,3 +181,5 @@ async function publicUser(
       })),
   };
 }
+
+  

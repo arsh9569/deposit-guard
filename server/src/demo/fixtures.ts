@@ -1,6 +1,6 @@
 /** Build a deterministic, structurally valid one-page PDF fixture for the seeded walkthrough. */
 export function createDemoFdrPdf(reference: string, amount: string, maturity: string, bankName = 'Synthetic National Bank'): Buffer {
-  const lines = [`FDR Reference: ${reference}`, `Bank Name: ${bankName}`, `Principal Amount: INR ${amount}`, 'Issue Date: 2026-01-01', `Maturity Date: ${maturity}`];
+  const lines = ['SYNTHETIC DEMO ONLY - NOT A FINANCIAL DOCUMENT', `FDR Reference: ${reference}`, `Bank Name: ${bankName}`, `Principal Amount: INR ${amount}`, 'Issue Date: 2026-01-01', `Maturity Date: ${maturity}`];
   const stream = `BT /F1 12 Tf 50 740 Td 16 TL ${lines.map((line, index) => `${index ? 'T* ' : ''}(${line}) Tj`).join(' ')} ET`;
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>', '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>', '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`];
   let pdf = '%PDF-1.4\n'; const offsets = [0];
