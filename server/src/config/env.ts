@@ -14,6 +14,8 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32, 'SESSION_SECRET must contain at least 32 characters'),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(24).default(8),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
+  OPENAI_API_KEY: z.string().trim().optional(),
+  OPENAI_MODEL: z.string().trim().min(1).default('gpt-6-astra'),
 });
 
 export const env = envSchema.parse(process.env);

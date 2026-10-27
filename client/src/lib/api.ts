@@ -10,6 +10,14 @@ export interface PortalUser {
   displayName: string;
   memberships: { institutionId: string; roles: string[] }[];
 }
+export interface PortalNotification {
+  id: string;
+  title: string;
+  message: string;
+  state: 'unread' | 'read' | 'dismissed';
+  createdAt: string;
+}
+export type AssistantChatMessage = { role: 'user' | 'assistant'; content: string };
 export interface DashboardResponse {
   institutionId: string;
   displayName: string;
@@ -88,6 +96,19 @@ export async function getCurrentUser(): Promise<PortalUser | null> {
   if (response.status === 401) return null;
   if (!response.ok) throw new ApiError('Could not restore your session. Try refreshing the page.', response.status);
   return ((await response.json()) as { user: PortalUser }).user;
+}
+
+export async function sendAssistantMessage(messages: AssistantChatMessage[], currentScreen: string): Promise<string> {
+  const response = await fetch('/api/assistant/chat', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', ...(await csrfHeader('Could not start a secure assistant request.')) },
+    body: JSON.stringify({ messages, currentScreen }),
+  });
+  const body = await response.json().catch(() => ({})) as { answer?: string; error?: string };
+  if (!response.ok) throw new ApiError(body.error ?? 'The assistant could not answer right now.', response.status);
+  if (!body.answer) throw new ApiError('The assistant returned an empty reply.', response.status);
+  return body.answer;
 }
 
 export async function updateUsername(displayName: string): Promise<PortalUser> {
@@ -215,6 +236,12 @@ export async function getDashboard(institutionId: string): Promise<DashboardResp
     throw new ApiError(message, response.status);
   }
   return (await response.json()) as DashboardResponse;
+}
+
+export async function getNotifications(institutionId: string): Promise<PortalNotification[]> {
+  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/workflows/notifications`, { credentials: 'include' });
+  if (!response.ok) throw new ApiError('Could not load notifications.', response.status);
+  return ((await response.json()) as { notifications: PortalNotification[] }).notifications;
 }
 
 export async function getVerificationInstruments(institutionId: string): Promise<VerificationInstrument[]> {

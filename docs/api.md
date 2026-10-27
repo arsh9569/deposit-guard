@@ -8,6 +8,8 @@ Planned versioned API and authorization conventions are documented in the [archi
 
 All routes below require an authenticated session and resolve institution membership on the server. The client must send the session cookie and CSRF token for state-changing requests.
 
+- `POST /assistant/chat` sends up to 16 user/assistant messages and the current screen to the OpenAI Responses API, returning a conversational workflow answer. It requires `OPENAI_API_KEY` in the server environment; the key is never sent to the browser. Requests are rate-limited.
+
 - `GET /dashboard?institutionId=<id>` returns tenant-scoped counts, the maturity queue, configured maturity window, and recent audit activity. A `403` is an authorization denial; the client handles loading, empty, error, and denied responses.
 - `GET|PUT /institutions/:institutionId/workflows/maturity/policy` reads or updates institution policy. Only institution administrators may edit it. Reminder lead days can be empty (disabled); no AICTE threshold is preconfigured. The dashboard window, delivery retry maximum/backoff, release evidence requirement, and replacement-completion requirement are configurable.
 - `GET /institutions/:institutionId/workflows/maturity/cases` lists instruments whose UTC maturity date is before the current UTC calendar day. Equality with today's date is not overdue.

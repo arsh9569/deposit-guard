@@ -18,6 +18,7 @@ import type { NotificationDelivery } from './services/maturity-monitoring.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { apiErrorHandler } from './middleware/api-error.js';
 import { createVerificationRouter } from './routes/verification.js';
+import { assistantRouter } from './routes/assistant.js';
 
 export interface AppDependencies {
   repository?: AuthRepository;
@@ -68,6 +69,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   );
   app.use('/api', csrfProtection);
   app.use('/api/health', healthRouter);
+  app.use('/api/assistant', assistantRouter);
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/institutions/:institutionId/fdr', createFdrSubmissionRouter(dependencies.documentExtractor));
   app.use('/api/institutions/:institutionId/verification', createVerificationRouter({ audit: dependencies.audit }));
