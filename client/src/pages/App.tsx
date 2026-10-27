@@ -3,10 +3,10 @@ import type { FormEvent, ReactNode } from 'react';
 import './aicte-login.css';
 import './aicte-unified-theme.css';
 import { auditEvents, fdrRecords, institution } from '../features/demo-data';
-import { createFdrDraft, getCurrentUser, getDashboard, getNotifications, getSupportedFdrMimeType, getVerificationAttempts, getVerificationInstruments, runVerificationAttempt, saveOcrCorrection, sendAssistantMessage, signIn, signOut, submitFdrDraft, updateFdrDraft, updateUsername, uploadFdrForOcr, type AssistantChatMessage, type DashboardResponse, type OcrUploadResult, type PortalNotification, type PortalUser, type VerificationAttempt, type VerificationInstrument } from '../lib/api';
+import { createFdrDraft, createInstitutionUser, getCurrentUser, getDashboard, getInstitutionUsers, getNotifications, getSupportedFdrMimeType, getVerificationAttempts, getVerificationInstruments, runVerificationAttempt, saveOcrCorrection, sendAssistantMessage, signIn, signOut, submitFdrDraft, updateFdrDraft, updateInstitutionUserAccess, updateUsername, uploadFdrForOcr, type AssistantChatMessage, type DashboardResponse, type InstitutionRole, type InstitutionUser, type OcrUploadResult, type PortalNotification, type PortalUser, type VerificationAttempt, type VerificationInstrument } from '../lib/api';
 
 type Screen =
-  'dashboard' | 'register' | 'ocr' | 'review' | 'verification' | 'compliance' | 'release' | 'audit';
+  'dashboard' | 'register' | 'ocr' | 'review' | 'verification' | 'compliance' | 'release' | 'audit' | 'users';
 type NavItem = { id: Screen; label: string; glyph: string; capability: string };
 const OCR_STORAGE_KEY = 'depositguard.demo.ocr-corrections.v2-amount-fixture';
 const nav: NavItem[] = [
@@ -16,16 +16,18 @@ const nav: NavItem[] = [
   { id: 'review', label: 'Official scrutiny', glyph: '✓', capability: 'reviews:decide' },
   { id: 'verification', label: 'Verification', glyph: '◇', capability: 'verification:read' },
   { id: 'compliance', label: 'Maturity & actions', glyph: '◷', capability: 'compliance:read' },
-  { id: 'release', label: 'Release / refund', glyph: '↻', capability: 'release:request' },
+  { id: 'release', label: 'Release / refund', glyph: '↻', capability: 'release:read' },
   { id: 'audit', label: 'Audit & reports', glyph: '▣', capability: 'audit:read' },
+  { id: 'users', label: 'Users & roles', glyph: '♙', capability: 'users:manage' },
 ];
+const permissionsByRole: Record<string, string[]> = {
+  institution_admin: [...nav.map((item) => item.capability), 'compliance:manage', 'verification:run', 'release:request', 'release:review'],
+  institution_operator: ['dashboard:read', 'instruments:create', 'documents:review', 'verification:read', 'compliance:read', 'release:read', 'release:request', 'audit:read'],
+  official_reviewer: ['dashboard:read', 'documents:review', 'reviews:decide', 'verification:read', 'compliance:read', 'release:read', 'release:review', 'audit:read'],
+  auditor: ['dashboard:read', 'verification:read', 'compliance:read', 'audit:read'],
+};
 function permissionsFor(roles: string[]) {
-  const permissions = new Set<string>();
-  if (roles.includes('institution_admin')) return new Set(nav.map((item) => item.capability));
-  if (roles.includes('institution_operator')) ['dashboard:read', 'instruments:create', 'documents:review', 'verification:read', 'compliance:read', 'release:request', 'audit:read'].forEach((permission) => permissions.add(permission));
-  if (roles.includes('official_reviewer')) ['dashboard:read', 'documents:review', 'reviews:decide', 'verification:read', 'compliance:read', 'audit:read'].forEach((permission) => permissions.add(permission));
-  if (roles.includes('auditor')) ['dashboard:read', 'verification:read', 'compliance:read', 'audit:read'].forEach((permission) => permissions.add(permission));
-  return permissions;
+  return new Set(roles.flatMap((role) => permissionsByRole[role] ?? []));
 }
 
 function Glyph({ children }: { children: ReactNode }) {
@@ -315,10 +317,6 @@ export function App() {
                 setScreen('ocr');
                 setToast(result.extractionStatus === 'complete' ? 'Document uploaded and text extraction completed.' : 'Document uploaded, but automatic text extraction failed. Review the file and enter any missing fields manually.');
               }}
-              onDone={(message) => {
-                setToast(message);
-                setScreen('dashboard');
-              }}
             />
           )}
           {screen === 'ocr' && (ocrResult
@@ -326,9 +324,10 @@ export function App() {
             : <OcrReview onDone={setToast} />)}
           {screen === 'review' && <ReviewConsole onDone={setToast} />}
           {screen === 'verification' && activeMembership && <Verification institutionId={activeMembership.institutionId} roles={activeMembership.roles} />}
-          {screen === 'compliance' && <Compliance go={go} />}
-          {screen === 'release' && <ReleaseRequests onDone={setToast} />}
+          {screen === 'compliance' && <Compliance go={go} roles={activeMembership?.roles ?? []} />}
+          {screen === 'release' && <ReleaseRequests onDone={setToast} roles={activeMembership?.roles ?? []} />}
           {screen === 'audit' && <AuditReports />}
+          {screen === 'users' && activeMembership && permissionsFor(activeMembership.roles).has('users:manage') && <UserManagement institutionId={activeMembership.institutionId} />}
         </main>
         <footer className="portal-footer">
           <span>
@@ -698,7 +697,7 @@ function Dashboard({ go, institutionId, displayName, canCreateFdr, onSessionExpi
   );
 }
 
-function Registration({ institutionId, onDone, onExtracted }: { institutionId: string; onDone: (message: string) => void; onExtracted: (result: OcrUploadResult) => void }) {
+function Registration({ institutionId, onExtracted }: { institutionId: string; onExtracted: (result: OcrUploadResult) => void }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [draftId, setDraftId] = useState('');
@@ -1425,7 +1424,7 @@ function Verification({ institutionId, roles }: { institutionId: string; roles: 
   const [loading, setLoading] = useState(true);
   const [busyInstrumentId, setBusyInstrumentId] = useState('');
   const [error, setError] = useState('');
-  const canInitiate = roles.includes('institution_operator') || roles.includes('institution_admin');
+  const canInitiate = permissionsFor(roles).has('verification:run');
   useEffect(() => {
     let active = true;
     Promise.all([getVerificationInstruments(institutionId), getVerificationAttempts(institutionId)])
@@ -1485,7 +1484,7 @@ function Verification({ institutionId, roles }: { institutionId: string; roles: 
   );
 }
 
-function Compliance({ go }: { go: (page: Screen) => void }) {
+function Compliance({ go, roles }: { go: (page: Screen) => void; roles: string[] }) {
   const [reminders, setReminders] = useState(true);
   const [lead, setLead] = useState(30);
   const [saved, setSaved] = useState(false);
@@ -1494,17 +1493,20 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
     scheduleFilter === 'All instruments' ||
     (scheduleFilter === 'Upcoming' ? record.daysToMaturity >= 0 : record.daysToMaturity < 0),
   );
+  const rolePermissions = permissionsFor(roles);
+  const canManagePolicy = rolePermissions.has('compliance:manage');
+  const canOpenRelease = rolePermissions.has('release:read');
   return (
     <>
       <PageTitle
         overline="PORTFOLIO MONITORING"
         title="Maturity & compliance"
         description="Track instrument dates, overdue follow-up, and renewal or replacement progress."
-        action={
+        action={canOpenRelease ? (
           <Button kind="secondary" onClick={() => go('release')}>
             Open action queue <Arrow />
           </Button>
-        }
+        ) : undefined}
       />
       <div className="compliance-metrics">
         <div>
@@ -1602,6 +1604,7 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
               aria-checked={reminders}
               onClick={() => setReminders(!reminders)}
               aria-label="Maturity reminders"
+              disabled={!canManagePolicy}
             >
               <i />
             </button>
@@ -1617,6 +1620,7 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
               max="90"
               value={lead}
               id="lead-time"
+              disabled={!canManagePolicy}
               onChange={(e) => {
                 setLead(Number(e.target.value));
                 setSaved(false);
@@ -1634,16 +1638,14 @@ function Compliance({ go }: { go: (page: Screen) => void }) {
               <small>Overdue sample is marked for admin attention.</small>
             </div>
           </div>
-          <Button kind="secondary" onClick={() => setSaved(true)}>
-            {saved ? 'Saved for demo ✓' : 'Save configuration'}
-          </Button>
+          {canManagePolicy ? <Button kind="secondary" onClick={() => setSaved(true)}>{saved ? 'Saved for demo ✓' : 'Save configuration'}</Button> : <small className="readonly-access-note">Institution administrator access is required to change reminder settings.</small>}
         </Panel>
       </div>
     </>
   );
 }
 
-function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
+function ReleaseRequests({ onDone, roles }: { onDone: (message: string) => void; roles: string[] }) {
   const releaseInstrument = fdrRecords.find((item) => item.reference === 'FDR-2024-220') ?? fdrRecords[2]!;
   const [creating, setCreating] = useState(false);
   const [reason, setReason] = useState('');
@@ -1652,6 +1654,10 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
   const [completion, setCompletion] = useState('');
   const [status, setStatus] = useState('Under scrutiny');
   const [error, setError] = useState('');
+  const rolePermissions = permissionsFor(roles);
+  const canRequest = rolePermissions.has('release:request');
+  const canReview = rolePermissions.has('release:review') || roles.includes('institution_admin');
+  const canComplete = canRequest;
   const request = (event: FormEvent) => {
     event.preventDefault();
     if (!reason.trim() || !file) {
@@ -1686,7 +1692,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
         overline="POST-MATURITY WORKFLOW"
         title="Release & refund requests"
         description="Create requests, review supporting evidence, and record processing completion separately."
-        action={<Button onClick={() => setCreating(!creating)}>＋ &nbsp;New request</Button>}
+        action={canRequest ? <Button onClick={() => setCreating(!creating)}>＋ &nbsp;New request</Button> : undefined}
       />
       {creating && (
         <Panel className="create-request">
@@ -1800,6 +1806,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
                 View <Arrow />
               </button>
             </div>
+            {canReview && <>
             <label className="field-label" htmlFor="release-observation">
               Scrutiny observations
             </label>
@@ -1819,6 +1826,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
               </Button>
               <Button onClick={() => decide('Approved')}>Authorize release ✓</Button>
             </div>
+            </>}
             <div className="decision-history">
               <strong>Decision history</strong>
               <div>
@@ -1842,7 +1850,7 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
             </div>
           </div>
         </Panel>
-        <Panel className="processing-panel">
+        {canComplete && <Panel className="processing-panel">
           <span className="processing-mark">▣</span>
           <h2>Processing record</h2>
           <p>Record actual completion only when authorized evidence is available.</p>
@@ -1873,10 +1881,86 @@ function ReleaseRequests({ onDone }: { onDone: (message: string) => void }) {
             evidence-backed update.
           </div>
           {error && <div className="alert alert-error">{error}</div>}
-        </Panel>
+        </Panel>}
       </div>
     </>
   );
+}
+
+function UserManagement({ institutionId }: { institutionId: string }) {
+  const [users, setUsers] = useState<InstitutionUser[]>([]);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [role, setRole] = useState<InstitutionRole>('official_reviewer');
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [createdEmail, setCreatedEmail] = useState('');
+  const [drafts, setDrafts] = useState<Record<string, { roles: InstitutionRole[]; status: 'active' | 'suspended' }>>({});
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [busyUserId, setBusyUserId] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const roleOptions: { value: InstitutionRole; label: string }[] = [
+    { value: 'institution_admin', label: 'Institution administrator' },
+    { value: 'institution_operator', label: 'Institution operator' },
+    { value: 'official_reviewer', label: 'Official reviewer' },
+    { value: 'auditor', label: 'Auditor' },
+  ];
+  const loadUsers = async () => {
+    try {
+      const list = await getInstitutionUsers(institutionId);
+      setUsers(list);
+      setDrafts(Object.fromEntries(list.map((user) => [user.id, { roles: user.roles, status: user.status }])));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load accounts.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void loadUsers(); }, [institutionId]);
+  const createUser = async (event: FormEvent) => {
+    event.preventDefault(); setBusy(true); setError(''); setNotice(''); setTemporaryPassword('');
+    try {
+      const created = await createInstitutionUser(institutionId, { email, displayName: name, role });
+      setUsers((current) => [...current, created.user].sort((a, b) => a.displayName.localeCompare(b.displayName)));
+      setDrafts((current) => ({ ...current, [created.user.id]: { roles: created.user.roles, status: created.user.status } }));
+      setCreatedEmail(created.user.email); setTemporaryPassword(created.temporaryPassword); setEmail(''); setName('');
+      setNotice('Account created. Copy the temporary password now; it will not be shown again.');
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not create this account.'); }
+    finally { setBusy(false); }
+  };
+  const saveAccess = async (user: InstitutionUser) => {
+    const access = drafts[user.id]; if (!access) return;
+    setBusyUserId(user.id); setError(''); setNotice('');
+    try {
+      const updated = await updateInstitutionUserAccess(institutionId, user.id, access);
+      setUsers((current) => current.map((item) => item.id === user.id ? updated : item));
+      setDrafts((current) => ({ ...current, [user.id]: { roles: updated.roles, status: updated.status } }));
+      setNotice(`Access updated for ${updated.displayName}.`);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not update account access.'); }
+    finally { setBusyUserId(''); }
+  };
+  const changeDraft = (user: InstitutionUser, update: Partial<{ roles: InstitutionRole[]; status: 'active' | 'suspended' }>) => setDrafts((current) => ({ ...current, [user.id]: { ...(current[user.id] ?? { roles: user.roles, status: user.status }), ...update } }));
+  return <>
+    <PageTitle overline="ACCESS CONTROL" title="Users & roles" description="Create institution accounts and assign role-based access." />
+    <Panel className="user-create-panel">
+      <PanelHeading title="Create account" detail="Each new account gets its own one-time temporary password." />
+      <form className="user-create-form" onSubmit={createUser}>
+        <Field label="Full name" required><input value={name} onChange={(event) => setName(event.target.value)} required maxLength={160} /></Field>
+        <Field label="Email / sign-in ID" required><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required maxLength={254} /></Field>
+        <Field label="Role" required><select value={role} onChange={(event) => setRole(event.target.value as InstitutionRole)}>{roleOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+        <Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</Button>
+      </form>
+      {temporaryPassword && <div className="temporary-credential" role="status"><strong>Temporary sign-in for {createdEmail}</strong><code>{temporaryPassword}</code><small>Copy this password and share it securely with the account owner.</small></div>}
+      {notice && <div className="inline-message message-ok" role="status">{notice}</div>}
+      {error && <div className="inline-message" role="alert">{error}</div>}
+    </Panel>
+    <Panel className="user-list-panel">
+      <PanelHeading title="Institution accounts" detail="Role changes and account suspensions are audited." />
+      {loading ? <div className="dashboard-state">Loading accounts…</div> : <div className="table-scroll"><table className="data-table user-access-table"><thead><tr><th>USER</th><th>ROLE ASSIGNMENTS</th><th>STATUS</th><th></th></tr></thead><tbody>{users.map((user) => {
+        const draft = drafts[user.id] ?? { roles: user.roles, status: user.status };
+        return <tr key={user.id}><td><strong>{user.displayName}</strong><small>{user.email}</small><code>{user.id}</code></td><td><select multiple size={4} value={draft.roles} aria-label={`Roles for ${user.email}`} onChange={(event) => changeDraft(user, { roles: Array.from(event.target.selectedOptions, (option) => option.value as InstitutionRole) })}>{roleOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></td><td><select value={draft.status} aria-label={`Status for ${user.email}`} onChange={(event) => changeDraft(user, { status: event.target.value as 'active' | 'suspended' })}><option value="active">Active</option><option value="suspended">Suspended</option></select></td><td><Button kind="secondary" disabled={busyUserId === user.id} onClick={() => void saveAccess(user)}>{busyUserId === user.id ? 'Saving…' : 'Save access'}</Button></td></tr>;
+      })}{users.length === 0 && <tr><td colSpan={4}>No accounts found.</td></tr>}</tbody></table></div>}
+      <small className="user-password-note">Existing passwords cannot be read or displayed. Passwords for new accounts are shown once at creation.</small>
+    </Panel>
+  </>;
 }
 
 function AuditReports() {

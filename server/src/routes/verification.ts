@@ -4,7 +4,7 @@ import { Types, type Model } from 'mongoose';
 import { auditWriter } from '../auth/audit-writer.js';
 import type { AuditWriter } from '../auth/types.js';
 import { requireAuthentication } from '../middleware/authentication.js';
-import { requireInstitutionRole } from '../middleware/authorization.js';
+import { requireInstitutionPermission } from '../middleware/authorization.js';
 import { FdrModel, type FdrRecord } from '../models/fdrs.js';
 import { VerificationAttemptModel, type VerificationAttemptRecord } from '../models/verification-attempts.js';
 import { verificationRequestSchema } from '../validators/model-schemas.js';
@@ -12,8 +12,6 @@ import { deterministicMockVerificationProvider, verificationDisplayLabel, type V
 
 const fdrs = FdrModel as Model<FdrRecord>;
 const attempts = VerificationAttemptModel as Model<VerificationAttemptRecord>;
-const operators = ['institution_admin', 'institution_operator'] as const;
-const readers = ['institution_admin', 'institution_operator', 'official_reviewer', 'auditor'] as const;
 
 export function createVerificationRouter(dependencies: { provider?: VerificationProvider; audit?: AuditWriter; now?: () => Date } = {}) {
   const router = Router({ mergeParams: true });
@@ -22,7 +20,7 @@ export function createVerificationRouter(dependencies: { provider?: Verification
   const now = dependencies.now ?? (() => new Date());
   router.use(requireAuthentication);
 
-  router.get('/instruments', requireInstitutionRole([...readers]), async (req, res, next) => {
+  router.get('/instruments', requireInstitutionPermission('verification:read'), async (req, res, next) => {
     try {
       const institutionId = new Types.ObjectId(req.institutionScope!.institutionId);
       const records = await fdrs.find({ institutionId }).sort({ reference: 1 }).limit(200).select('_id reference bankName principalAmount').lean().exec();
@@ -30,7 +28,7 @@ export function createVerificationRouter(dependencies: { provider?: Verification
     } catch (error) { next(error); }
   });
 
-  router.get('/attempts', requireInstitutionRole([...readers]), async (req, res, next) => {
+  router.get('/attempts', requireInstitutionPermission('verification:read'), async (req, res, next) => {
     try {
       const institutionId = new Types.ObjectId(req.institutionScope!.institutionId);
       const records = await attempts.find({ institutionId }).sort({ requestedAt: -1 }).limit(200).lean().exec();
@@ -43,7 +41,7 @@ export function createVerificationRouter(dependencies: { provider?: Verification
     } catch (error) { next(error); }
   });
 
-  router.post('/attempts', requireInstitutionRole([...operators]), async (req, res, next) => {
+  router.post('/attempts', requireInstitutionPermission('verification:run'), async (req, res, next) => {
     try {
       const parsed = verificationRequestSchema.safeParse(req.body);
       if (!parsed.success) { res.status(400).json({ error: 'Invalid verification request', issues: parsed.error.issues }); return; }

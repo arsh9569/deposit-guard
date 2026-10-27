@@ -2835,10 +2835,34 @@ textarea:focus-visible {
 .assistant-ask input { flex: 1; min-width: 0; min-height: 40px; padding: 8px 10px; border: 1px solid #ccdbea; border-radius: 8px; color: #183958; font: inherit; font-size: 12px; }
 .assistant-ask > button { padding: 0 14px; border: 0; border-radius: 8px; background: #1765ad; color: #fff; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .assistant-ask > button:disabled { opacity: .5; cursor: default; }
+.user-create-panel,
+.user-list-panel { margin-bottom: 14px; }
+.user-create-form { display: grid; grid-template-columns: 1fr 1.3fr 1fr auto; align-items: end; gap: 12px; }
+.user-create-form .field > label { font-size: 12px; }
+.user-create-form input,
+.user-create-form select { min-height: 40px !important; font-size: 13px !important; }
+.user-create-form > .button { min-height: 40px; white-space: nowrap; }
+.temporary-credential { display: grid; gap: 7px; margin-top: 15px; padding: 14px; border: 1px solid #cfe2d7; border-radius: 10px; background: #eff8f2; color: #24563d; }
+.temporary-credential code { width: fit-content; padding: 8px 10px; border-radius: 6px; background: #fff; color: #173b2a; font-size: 14px; user-select: all; }
+.temporary-credential small,
+.user-password-note,
+.readonly-access-note { color: #73859a; font-size: 12px; }
+.user-access-table { min-width: 760px; }
+.user-access-table td:first-child code { display: block; margin-top: 5px; color: #8496aa; font-size: 10px; overflow-wrap: anywhere; }
+.user-access-table td select { min-height: 38px; padding: 5px 8px; border: 1px solid #d4dfeb; border-radius: 7px; background: #fff; color: #294663; font-size: 12px; }
+.user-access-table td select[multiple] { height: 92px; }
+.user-password-note { display: block; margin-top: 12px; }
+.readonly-access-note { display: block; line-height: 1.5; }
 .no-results {
   text-align: center !important;
   color: #919e97 !important;
   padding: 30px !important;
+}
+@media (max-width: 850px) {
+  .user-create-form { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .user-create-form { grid-template-columns: 1fr; }
 }
 .toast {
   position: fixed;

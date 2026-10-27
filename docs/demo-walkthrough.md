@@ -7,7 +7,18 @@ $env:DEMO_PASSWORD = 'choose-a-local-demo-password'
 npm run seed:demo --workspace @depositguard/server
 ```
 
-The script refuses to run in production, requires a password supplied locally, and creates no bank credentials. Sign in as `operator@northbridge.example` or `reviewer@northbridge.example` with that password. Demo users are named by role and use reserved `.example` email addresses. PDF files are generated deterministically, visibly marked **SYNTHETIC DEMO ONLY - NOT A FINANCIAL DOCUMENT**, and stored in the private document directory. Do not attach real financial documents or personal information to the demo. Maturity dates are calculated relative to the seed date.
+The script refuses to run in production, requires a password supplied locally, and creates no bank credentials. Sign in as `operator@northbridge.example` or `reviewer@northbridge.example` with the password originally supplied at seed time. Demo users use reserved `.example` email addresses. To provision the requested separate demo accounts and roles without resetting existing passwords, run `npm run provision:demo-users --workspace @depositguard/server`; new-account passwords are generated once and printed by the command. PDF files are generated deterministically, visibly marked **SYNTHETIC DEMO ONLY - NOT A FINANCIAL DOCUMENT**, and stored in the private document directory. Do not attach real financial documents or personal information to the demo. Maturity dates are calculated relative to the seed date.
+
+## Demo role access
+
+| Role | Access |
+| --- | --- |
+| Institution administrator | All institution features, user/role management, workflow policy, and oversight |
+| Institution operator | Create FDRs, run verification, create renewals and release requests, and view operational queues |
+| Official reviewer | Review submissions, decide renewals/releases, and read institution queues and reports |
+| Auditor | Read dashboard, verification results, maturity status, notifications, and audit reports |
+
+User and role administration is institution-scoped, audited, and available only to active institution administrators. Server routes enforce permissions; hiding a navigation item is not the authorization control.
 
 ## Walkthrough
 

@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 import type { InstitutionRole } from '../models/domain.js';
 import { auditWriter } from '../auth/audit-writer.js';
 import type { AuditWriter } from '../auth/types.js';
+import { rolesWithInstitutionPermission, type InstitutionPermission } from '../auth/rbac.js';
 
 /** Institution ID is only a requested scope selector. Access is granted after server-side membership lookup. */
 export function requireInstitutionRole(
@@ -48,4 +49,11 @@ export function requireInstitutionRole(
       next(error);
     }
   };
+}
+
+export function requireInstitutionPermission(
+  permission: InstitutionPermission,
+  writer: AuditWriter = auditWriter,
+): RequestHandler {
+  return requireInstitutionRole(rolesWithInstitutionPermission(permission), writer);
 }
