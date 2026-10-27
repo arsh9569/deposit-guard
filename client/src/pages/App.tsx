@@ -134,6 +134,9 @@ export function App() {
   const [ocrResult, setOcrResult] = useState<OcrUploadResult | null>(null);
 
   const activeMembership = sessionUser?.memberships[0];
+  console.log('Logged in user:', sessionUser?.displayName);
+console.log('Account roles:', activeMembership?.roles);
+console.log('Institution ID:', activeMembership?.institutionId);
   const isStudent = sessionUser?.accountType === 'student';
 
   const allowedNav = isStudent
