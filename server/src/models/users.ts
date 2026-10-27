@@ -11,6 +11,7 @@ export interface UserRecord {
   authSubject: string;
   email: string;
   displayName: string;
+  accountType?: 'student' | 'institution';
   passwordHash?: string;
   status: 'active' | 'suspended' | 'invited';
   memberships: UserMembership[];
@@ -33,6 +34,11 @@ const userSchema = new Schema<UserRecord>(
     authSubject: { type: String, required: true, trim: true, immutable: true },
     email: { type: String, required: true, lowercase: true, trim: true },
     displayName: { type: String, required: true, trim: true, maxlength: 160 },
+    accountType: {
+  type: String,
+  enum: ['student', 'institution'],
+  required: false,
+},
     // Argon2id/bcrypt encoded value. Never expose this field in API responses.
     passwordHash: { type: String, select: false },
     status: {
@@ -51,4 +57,6 @@ userSchema.index({ authSubject: 1 }, { unique: true, name: 'user_auth_subject_un
 userSchema.index({ email: 1 }, { unique: true, name: 'user_email_unique' });
 userSchema.index({ 'memberships.institutionId': 1, status: 1 }, { name: 'user_membership_lookup' });
 
-export const UserModel = mongoose.models.User ?? model<UserRecord>('User', userSchema);
+export const UserModel: mongoose.Model<UserRecord> =
+  (mongoose.models.User as mongoose.Model<UserRecord> | undefined) ??
+  model<UserRecord>('User', userSchema);

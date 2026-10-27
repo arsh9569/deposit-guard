@@ -87,6 +87,7 @@ export const fdrDraftSchema = z.strictObject({
   bankName: fdrFields.bankName.optional(),
   branchName: fdrFields.branchName.optional(),
   holderName: fdrFields.holderName.optional(),
+  studentEnrollment: z.string().trim().min(1).max(100).optional(),
   principalAmount: positiveMoneySchema.optional(),
   currency: z.string().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).optional(),
   issueDate: validCalendarDate.optional(),

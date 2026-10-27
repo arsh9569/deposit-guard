@@ -11,6 +11,7 @@ export interface AuthUser {
   _id: Types.ObjectId | string;
   email: string;
   displayName: string;
+  accountType?: 'student' | 'institution';
   status: 'active' | 'suspended' | 'invited';
   passwordHash?: string;
   memberships: AuthMembership[];

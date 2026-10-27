@@ -61,5 +61,6 @@ documentSchema.index(
   { name: 'document_institution_scan_status' },
 );
 
-export const DocumentModel =
-  mongoose.models.Document ?? model<DocumentRecord>('Document', documentSchema);
+export const DocumentModel: mongoose.Model<DocumentRecord> =
+  (mongoose.models.Document as mongoose.Model<DocumentRecord> | undefined) ??
+  mongoose.model<DocumentRecord>('Document', documentSchema);

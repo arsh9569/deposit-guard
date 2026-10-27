@@ -1,0 +1,598 @@
+
+.dg-signup {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 46% 54%;
+  background: #f1f5fb;
+  font-family: inherit;
+}
+
+.dg-signup * {
+  box-sizing: border-box;
+}
+
+.dg-signup-hero {
+  background: linear-gradient(145deg, #102b4d, #254e75);
+  color: #fff;
+  padding: 45px clamp(28px, 4vw, 75px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+.dg-signup-hero::after {
+  content: "";
+  position: absolute;
+  width: 350px;
+  height: 350px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 50%;
+  right: -160px;
+  bottom: 100px;
+  pointer-events: none;
+}
+
+.dg-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.dg-brand-icon {
+  width: 55px;
+  height: 55px;
+  border: 2px solid #f3bc58;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #f3bc58;
+  font-size: 30px;
+}
+
+.dg-brand strong {
+  display: block;
+  font-size: 28px;
+  letter-spacing: 0.5px;
+}
+
+.dg-brand span {
+  display: block;
+  font-size: 12px;
+  color: #d6e4f3;
+}
+
+.dg-hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 510px;
+  padding: 60px 0;
+}
+
+.dg-eyebrow {
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: #f3bc58;
+  font-weight: 700;
+  margin-bottom: 22px;
+}
+
+.dg-hero-content h1 {
+  color: #fff;
+  font-size: clamp(34px, 3.3vw, 56px);
+  line-height: 1.12;
+  letter-spacing: -1.5px;
+  margin: 0 0 24px;
+}
+
+.dg-hero-content h1 span {
+  color: #f3bc58;
+}
+
+.dg-hero-content > p {
+  color: #d4e1ef;
+  font-size: 17px;
+  line-height: 1.7;
+  margin-bottom: 40px;
+}
+
+.dg-feature {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  padding: 13px 0;
+}
+
+.dg-feature > span {
+  width: 42px;
+  height: 42px;
+  border: 1px solid #7290ae;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #f3bc58;
+  font-size: 23px;
+  flex-shrink: 0;
+}
+
+.dg-feature strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.dg-feature small {
+  color: #c3d5e7;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dg-hero-footer {
+  color: #d1deed;
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  position: relative;
+  z-index: 1;
+}
+
+.dg-hero-footer span {
+  display: block;
+  margin-top: 9px;
+}
+
+.dg-signup-panel {
+  padding: 45px 28px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dg-signup-card {
+  width: 100%;
+  max-width: 580px;
+  background: #fff;
+  padding: clamp(25px, 3vw, 48px);
+  border-radius: 18px;
+  box-shadow: 0 15px 55px rgba(20, 49, 87, 0.08);
+  border: 1px solid #e5ebf3;
+}
+
+.dg-signup-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.dg-signup-top > span {
+  color: #71849d;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+}
+
+.dg-signup-top button,
+.dg-login-footer button {
+  background: none;
+  border: none;
+  color: #1761ac;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.dg-progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.dg-progress div {
+  height: 5px;
+  background: #e6edf5;
+  border-radius: 10px;
+}
+
+.dg-progress div.active {
+  background: #1761ac;
+}
+
+.dg-step-label {
+  color: #1761ac;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.dg-signup-card h2 {
+  color: #102f53;
+  font-size: clamp(26px, 2.2vw, 35px);
+  margin: 0 0 10px;
+  letter-spacing: -0.7px;
+}
+
+.dg-subtitle {
+  color: #71849d;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+
+.dg-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 25px;
+}
+
+.dg-role {
+  border: 1.5px solid #d5e0ed;
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.2s ease;
+  color: #163758;
+}
+
+.dg-role:hover {
+  border-color: #1761ac;
+  transform: translateY(-2px);
+}
+
+.dg-role.selected {
+  background: #eaf2ff;
+  border-color: #1761ac;
+  box-shadow: 0 0 0 1px #1761ac inset;
+}
+
+.dg-role-icon {
+  display: block;
+  font-size: 26px;
+  margin-bottom: 12px;
+}
+
+.dg-role strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 5px;
+}
+
+.dg-role small {
+  color: #72859b;
+  font-size: 12px;
+}
+
+.dg-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 14px;
+}
+
+.dg-full {
+  grid-column: 1 / -1;
+}
+
+.dg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dg-field > span {
+  color: #173a60;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.dg-field input {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 13px;
+  border: 1px solid #d5e0ed;
+  border-radius: 9px;
+  background: #fff;
+  color: #102f53;
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.dg-field input:focus {
+  border-color: #1761ac;
+  box-shadow: 0 0 0 3px rgba(23, 97, 172, 0.1);
+}
+
+.dg-field input::placeholder {
+  color: #9aaabd;
+}
+
+.dg-primary {
+  background: #19518e;
+  color: white;
+  border: 0;
+  border-radius: 9px;
+  padding: 14px 20px;
+  min-height: 48px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.dg-signup form > .dg-primary {
+  width: 100%;
+  margin-top: 25px;
+}
+
+.dg-primary:hover:not(:disabled) {
+  background: #103f74;
+}
+
+.dg-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dg-secondary {
+  border: 1px solid #d5e0ed;
+  border-radius: 9px;
+  padding: 13px 20px;
+  background: white;
+  color: #173a60;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.dg-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 25px;
+}
+
+.dg-actions > button {
+  flex: 1;
+}
+
+.dg-strength {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  margin: 5px 0 8px;
+}
+
+.dg-strength div {
+  height: 5px;
+  background: #e4eaf2;
+  border-radius: 5px;
+}
+
+.dg-strength div.filled {
+  background: #2d9b77;
+}
+
+.dg-hint {
+  color: #71849d;
+  font-size: 12px;
+}
+
+.dg-error {
+  color: #bb3333;
+  background: #fff0f0;
+  border: 1px solid #f4cccc;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+  margin-top: 16px;
+}
+
+.dg-review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dg-review > div:not(.dg-demo-notice):not(.dg-actions) {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-bottom: 1px solid #edf1f5;
+  padding-bottom: 12px;
+}
+
+.dg-review span {
+  color: #74869a;
+  font-size: 12px;
+}
+
+.dg-review strong {
+  color: #15395d;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.dg-demo-notice {
+  padding: 15px;
+  background: #edf4fc;
+  border: 1px solid #d4e5f7;
+  border-radius: 10px;
+}
+
+.dg-demo-notice p {
+  color: #526c86;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 7px 0 0;
+}
+
+.dg-login-footer {
+  text-align: center;
+  margin: 30px 0 0;
+  color: #72859b;
+  font-size: 13px;
+}
+
+@media (max-width: 950px) {
+  .dg-signup {
+    grid-template-columns: 1fr;
+  }
+
+  .dg-signup-hero {
+    min-height: auto;
+    padding: 25px;
+  }
+
+  .dg-hero-content {
+    padding: 30px 0 10px;
+  }
+
+  .dg-hero-content h1 {
+    font-size: 34px;
+  }
+
+  .dg-feature,
+  .dg-hero-footer {
+    display: none;
+  }
+
+  .dg-signup-panel {
+    padding: 24px 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .dg-signup-card {
+    padding: 24px 18px;
+  }
+
+  .dg-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dg-role-grid {
+    gap: 8px;
+  }
+
+  .dg-role {
+    padding: 14px 10px;
+  }
+
+  .dg-actions {
+    flex-direction: column;
+  }
+
+  .dg-signup-top {
+    align-items: flex-start;
+  }
+}
+
+/* ===== OTP UI Layout Fix ===== */
+
+.dg-signup .dg-progress {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+  width: 100%;
+}
+
+.dg-signup .dg-progress > div {
+  width: 100%;
+  height: 5px;
+  min-width: 0;
+  border-radius: 10px;
+}
+
+/* OTP Section */
+.dg-signup .dg-otp-section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+}
+
+.dg-signup .dg-otp-icon {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
+  background: #eaf2ff;
+  color: #1761ac;
+  font-size: 34px;
+  margin: 0;
+}
+
+.dg-signup .dg-otp-section h3 {
+  margin: 0;
+  text-align: center;
+  color: #102f53;
+  font-size: 22px;
+}
+
+.dg-signup .dg-otp-section > p {
+  margin: 0;
+  text-align: center;
+  color: #71849d;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.dg-signup .dg-otp-section label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #173a60;
+}
+
+.dg-signup .dg-otp-section input {
+  display: block;
+  width: 100%;
+  min-height: 54px;
+  padding: 12px;
+  border: 1px solid #d5e0ed;
+  border-radius: 10px;
+  background: #fff;
+  color: #102f53;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 6px;
+  box-sizing: border-box;
+}
+
+.dg-signup .dg-otp-section input:focus {
+  outline: 2px solid #1761ac;
+  outline-offset: 1px;
+}
+
+.dg-signup .dg-otp-section > button {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  border-radius: 9px;
+}
+
+.dg-signup .dg-otp-section .dg-demo-notice {
+  margin-top: 6px;
+}
+.dg-signup .dg-otp-section input::placeholder {
+  letter-spacing: 1px;
+  font-size: 16px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+
+.dg-signup .dg-otp-section input {
+  letter-spacing: 5px;
+}

@@ -1,16 +1,22 @@
 import { Children, cloneElement, isValidElement, useEffect, useId, useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
+import { AccountSignup } from './AccountSignup';
 import './aicte-login.css';
 import './aicte-unified-theme.css';
 import { auditEvents, fdrRecords, institution } from '../features/demo-data';
 import { getDashboard, getVerificationAttempts, getVerificationInstruments, runVerificationAttempt, signIn, type DashboardResponse, type PortalUser, type VerificationAttempt, type VerificationInstrument } from '../lib/api';
-
+import { getStudentProfile } from '../lib/api';
+import type { StudentProfile, StudentRecords } from '../lib/api';
+import { getStudentRecords, requestStudentRefund, getInstitutionStudentLinks, linkInstitutionStudent, assignInstitutionFdr } from '../lib/api';
+import type { LinkedStudent, AssignableFdr } from '../lib/api';
 type Screen =
-  'dashboard' | 'register' | 'ocr' | 'review' | 'verification' | 'compliance' | 'release' | 'audit';
+  'dashboard' | 'student-linking' | 'register' | 'ocr' | 'review'| 'verification' | 'compliance' | 'release' | 'audit'
+  | 'student-fdrs' | 'student-status' | 'student-documents' | 'student-maturity' | 'student-refunds' | 'student-profile';
 type NavItem = { id: Screen; label: string; glyph: string; capability: string };
 const OCR_STORAGE_KEY = 'depositguard.demo.ocr-corrections.v2-amount-fixture';
 const nav: NavItem[] = [
   { id: 'dashboard', label: 'Overview', glyph: '◫', capability: 'dashboard:read' },
+  { id: 'student-linking', label: 'Student linking', glyph: '♙', capability: 'students:link' },
   { id: 'register', label: 'FDR register', glyph: '▤', capability: 'instruments:create' },
   { id: 'ocr', label: 'Document review', glyph: '⌗', capability: 'documents:review' },
   { id: 'review', label: 'Official scrutiny', glyph: '✓', capability: 'reviews:decide' },
@@ -19,10 +25,20 @@ const nav: NavItem[] = [
   { id: 'release', label: 'Release / refund', glyph: '↻', capability: 'release:request' },
   { id: 'audit', label: 'Audit & reports', glyph: '▣', capability: 'audit:read' },
 ];
+const studentNav: NavItem[] = [
+  { id: 'dashboard', label: 'Overview', glyph: '◫', capability: 'student:read' },
+  { id: 'student-fdrs', label: 'My FDRs', glyph: '▤', capability: 'student:read' },
+  { id: 'student-status', label: 'FDR Status', glyph: '✓', capability: 'student:read' },
+  { id: 'student-documents', label: 'My Documents', glyph: '⌗', capability: 'student:read' },
+  { id: 'student-maturity', label: 'Maturity & Alerts', glyph: '◷', capability: 'student:read' },
+  { id: 'student-refunds', label: 'Refund Requests', glyph: '↻', capability: 'student:read' },
+  { id: 'student-profile', label: 'My Profile', glyph: '▣', capability: 'student:read' },
+];
+
 function permissionsFor(roles: string[]) {
   const permissions = new Set<string>();
   if (roles.includes('institution_admin')) return new Set(nav.map((item) => item.capability));
-  if (roles.includes('institution_operator')) ['dashboard:read', 'instruments:create', 'documents:review', 'verification:read', 'compliance:read', 'release:request', 'audit:read'].forEach((permission) => permissions.add(permission));
+if (roles.includes('institution_operator')) ['dashboard:read', 'students:link', 'instruments:create', 'documents:review', 'verification:read', 'compliance:read', 'release:request', 'audit:read'].forEach((permission) => permissions.add(permission));
   if (roles.includes('official_reviewer')) ['dashboard:read', 'documents:review', 'reviews:decide', 'verification:read', 'compliance:read', 'audit:read'].forEach((permission) => permissions.add(permission));
   if (roles.includes('auditor')) ['dashboard:read', 'verification:read', 'compliance:read', 'audit:read'].forEach((permission) => permissions.add(permission));
   return permissions;
@@ -72,13 +88,18 @@ function Tag({ children, tone = 'neutral' }: { children: ReactNode; tone?: strin
 
 export function App() {
   const [sessionUser, setSessionUser] = useState<PortalUser | null>(null);
+  const [showSignup, setShowSignup] = useState(false);
   const signedIn = Boolean(sessionUser);
   const [expired, setExpired] = useState(false);
   const [screen, setScreen] = useState<Screen>('dashboard');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState('');
   const activeMembership = sessionUser?.memberships[0];
-  const allowedNav = nav.filter((item) => permissionsFor(activeMembership?.roles ?? []).has(item.capability));
+  const isStudent =
+  sessionUser?.accountType === 'student';
+  const allowedNav = isStudent
+    ? studentNav
+    : nav.filter((item) => permissionsFor(activeMembership?.roles ?? []).has(item.capability));
   useEffect(() => {
     if (!signedIn) return;
     const timer = window.setTimeout(
@@ -90,23 +111,33 @@ export function App() {
     );
     return () => window.clearTimeout(timer);
   }, [signedIn]);
-  if (!signedIn)
+  if (!signedIn) {
+  if (showSignup) {
     return (
-      <Login
-        expired={expired}
-        onLogin={(user) => {
-          setSessionUser(user);
-          setExpired(false);
-          setScreen('dashboard');
-        }}
+      <AccountSignup
+        onBack={() => setShowSignup(false)}
       />
     );
+  }
+
+  return (
+    <Login
+      expired={expired}
+      onSignup={() => setShowSignup(true)}
+      onLogin={(user) => {
+        setSessionUser(user);
+        setExpired(false);
+        setScreen('dashboard');
+      }}
+    />
+  );
+}
   const go = (page: Screen) => {
     setScreen(page);
     setMobileOpen(false);
     setToast('');
   };
-  const title = nav.find((item) => item.id === screen)?.label ?? 'Overview';
+  const title = allowedNav.find((item) => item.id === screen)?.label ?? 'Overview';
   return (
     <div className="portal">
       {mobileOpen && (
@@ -134,8 +165,8 @@ export function App() {
         <button className="institution-select">
           <span className="institution-monogram">I</span>
           <span>
-            <strong>Your institution</strong>
-            <small>Institution workspace</small>
+            <strong>{isStudent ? 'Student Portal' : 'Your institution'}</strong>
+            <small>{isStudent ? 'Student workspace' : 'Institution workspace'}</small>
           </span>
           <b>⌄</b>
         </button>
@@ -166,7 +197,9 @@ export function App() {
           <span className="avatar">{sessionUser?.displayName.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
           <span>
             <strong>{sessionUser?.displayName}</strong>
-            <small>{activeMembership?.roles.join(', ') ?? 'No institution membership'}</small>
+            <small>
+             {isStudent ? 'Student' : activeMembership?.roles.join(', ') ?? 'No institution membership'}
+            </small>
           </span>
           <b>···</b>
         </button>
@@ -214,9 +247,31 @@ export function App() {
               </button>
             </div>
           )}
-          {screen === 'dashboard' && activeMembership && <Dashboard go={go} institutionId={activeMembership.institutionId} onSessionExpired={() => setSessionUser(null)} />}
-          {screen === 'dashboard' && !activeMembership && <div className="dashboard-state state-denied" role="alert"><strong>No institution access</strong><p>Your account has no active institution membership.</p></div>}
-          {screen === 'register' && (
+           {screen === 'dashboard' && isStudent && (
+  <StudentOverview name={sessionUser?.displayName ?? 'Student'} go={go} />
+)}
+
+{screen === 'dashboard' && !isStudent && activeMembership && (
+  <Dashboard
+    go={go}
+    institutionId={activeMembership.institutionId}
+    onSessionExpired={() => setSessionUser(null)}
+  />
+)}
+
+{screen === 'dashboard' && !isStudent && !activeMembership && (
+  <div className="dashboard-state state-denied" role="alert">
+    <strong>No institution access</strong>
+    <p>Your account has no active institution membership.</p>
+  </div>
+)}
+          {isStudent && screen.startsWith('student-') && (
+            <StudentPage screen={screen} name={sessionUser.displayName} email={sessionUser.email} go={go} />
+          )}
+          {!isStudent && screen === 'student-linking' && activeMembership && (
+            <InstitutionStudentLinking institutionId={activeMembership.institutionId} />
+          )}
+          {!isStudent && screen === 'register' && (
             <Registration
               onDone={(message) => {
                 setToast(message);
@@ -224,12 +279,12 @@ export function App() {
               }}
             />
           )}
-          {screen === 'ocr' && <OcrReview onDone={setToast} />}
-          {screen === 'review' && <ReviewConsole onDone={setToast} />}
-          {screen === 'verification' && activeMembership && <Verification institutionId={activeMembership.institutionId} roles={activeMembership.roles} />}
-          {screen === 'compliance' && <Compliance go={go} />}
-          {screen === 'release' && <ReleaseRequests onDone={setToast} />}
-          {screen === 'audit' && <AuditReports />}
+          {!isStudent && screen === 'ocr' && <OcrReview onDone={setToast} />}
+          {!isStudent && screen === 'review' && <ReviewConsole onDone={setToast} />}
+          {!isStudent && screen === 'verification' && activeMembership && <Verification institutionId={activeMembership.institutionId} roles={activeMembership.roles} />}
+          {!isStudent && screen === 'compliance' && <Compliance go={go} />}
+          {!isStudent && screen === 'release' && <ReleaseRequests onDone={setToast} />}
+          {!isStudent && screen === 'audit' && <AuditReports />}
         </main>
         <footer className="portal-footer">
           <span>
@@ -242,7 +297,15 @@ export function App() {
   );
 }
 
-function Login({ onLogin, expired }: { onLogin: (user: PortalUser) => void; expired: boolean }) {
+function Login({
+  onLogin,
+  onSignup,
+  expired,
+}: {
+  onLogin: (user: PortalUser) => void;
+  onSignup: () => void;
+  expired: boolean;
+}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -314,7 +377,22 @@ function Login({ onLogin, expired }: { onLogin: (user: PortalUser) => void; expi
             <button type="button" className="aicte-link" onClick={() => setError('Ask your institution administrator to reset your password.')}>Forgot password?</button>
           </div>
           <button className="aicte-submit" type="submit" disabled={busy}>{busy ? 'Signing in securely…' : 'Login'}</button>
-          <p className="aicte-help">Don't have an account? Contact AICTE / your institution administrator.</p>
+          <p className="aicte-help">
+  Don't have an account?{' '}
+  <button
+    type="button"
+    onClick={onSignup}
+    style={{
+      border: 'none',
+      background: 'transparent',
+      color: '#175da5',
+      cursor: 'pointer',
+      fontWeight: 600,
+    }}
+  >
+    Sign Up
+  </button>
+</p>
         </form>
       </section>
     </div>
@@ -367,6 +445,306 @@ function PanelHeading({
 }
 function SectionTag({ children }: { children: ReactNode }) {
   return <span className="section-tag">{children}</span>;
+}
+
+function StudentOverview({ name, go }: { name: string; go: (page: Screen) => void }) {
+  const { records, loading, error } = useStudentRecords();
+  const dateLabel = new Intl.DateTimeFormat('en-IN', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date()).toUpperCase();
+
+  const metrics = [
+    {
+      title: 'My FDRs',
+      symbol: '▤',
+      color: 'mint',
+      note: 'Your deposit records',
+    },
+    {
+      title: 'Pending review',
+      symbol: '⌗',
+      color: 'gold',
+      note: 'Your applications under review',
+    },
+    {
+      title: 'Upcoming maturity',
+      symbol: '◷',
+      color: 'peach',
+      note: 'Your upcoming deposit maturities',
+    },
+    {
+      title: 'Refund requests',
+      symbol: '↻',
+      color: 'lilac',
+      note: 'Your refund application status',
+    },
+  ];
+
+  return (
+    <>
+      <PageTitle
+        overline={dateLabel}
+        title={`Good afternoon, ${name}`}
+        description="Track your security deposits, FDR status and refund requests."
+      />
+
+      <div className="metrics-grid">
+        {metrics.map((item) => (
+          <button type="button" className="metric-card" key={item.title}
+            onClick={() => go(item.title === 'My FDRs' ? 'student-fdrs' : item.title === 'Pending review' ? 'student-status' : item.title === 'Upcoming maturity' ? 'student-maturity' : 'student-refunds')}>
+            <div>
+              <span>{item.title}</span>
+              <i className={`metric-symbol ${item.color}`}>
+                {item.symbol}
+              </i>
+            </div>
+
+            <strong>{loading ? '…' : !records ? '—' : item.title === 'My FDRs' ? records.fdrs.length : item.title === 'Pending review' ? records.fdrs.filter(f => f.reviewStatus === 'pending').length : item.title === 'Upcoming maturity' ? records.fdrs.filter(f => new Date(f.maturityDate).getTime() >= Date.now() && new Date(f.maturityDate).getTime() <= Date.now() + 30 * 86400000).length : records.refunds.length}</strong>
+            <small>{item.note}</small>
+          </button>
+        ))}
+      </div>
+
+      <div className="dashboard-columns">
+        <Panel className="action-panel">
+          <PanelHeading
+            title="My FDRs & maturity"
+            detail="Your deposit and maturity information"
+          />
+
+          <div className="dashboard-state dashboard-empty">
+            <strong>Your FDR records</strong>
+            {error ? <p role="alert">{error}</p> : records?.fdrs.length ? records.fdrs.slice(0, 4).map(f => <p key={f.id}>{f.reference} · {f.bankName} · ₹{f.amount} · Matures {formatStudentDate(f.maturityDate)}</p>) : <p>{loading ? 'Loading…' : records?.linked ? 'No FDRs have been assigned to you yet.' : 'Your institution must verify and link your student account before FDRs appear.'}</p>}
+          </div>
+        </Panel>
+
+        <Panel className="activity-panel">
+          <PanelHeading
+            title="Recent activity"
+            detail="Updates related to your account"
+          />
+
+          <div className="dashboard-state dashboard-empty">
+            {records?.refunds.length ? records.refunds.slice(0, 3).map(r => <p key={r.id}>Refund request · {r.status} · {formatStudentDate(r.createdAt)}</p>) : 'No student activity available yet.'}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="student-quick-actions" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: 16, marginTop: 24 }}>
+        <button type="button" className="panel" onClick={() => go('student-fdrs')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: 24, textAlign: 'left', cursor: 'pointer', minWidth: 0, width: '100%', whiteSpace: 'normal' }}>
+          <strong style={{ fontSize: 19, overflowWrap: 'anywhere' }}>My Deposits</strong>
+          <span style={{ fontSize: 15, lineHeight: 1.6, overflowWrap: 'anywhere' }}>View your personal security deposit records.</span>
+        </button>
+        <button type="button" className="panel" onClick={() => go('student-refunds')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: 24, textAlign: 'left', cursor: 'pointer', minWidth: 0, width: '100%', whiteSpace: 'normal' }}>
+          <strong style={{ fontSize: 19, overflowWrap: 'anywhere' }}>Refund Status</strong>
+          <span style={{ fontSize: 15, lineHeight: 1.6, overflowWrap: 'anywhere' }}>Track your refund requests.</span>
+        </button>
+        <button type="button" className="panel" onClick={() => go('student-profile')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, padding: 24, textAlign: 'left', cursor: 'pointer', minWidth: 0, width: '100%', whiteSpace: 'normal' }}>
+          <strong style={{ fontSize: 19, overflowWrap: 'anywhere' }}>My Profile</strong>
+          <span style={{ fontSize: 15, lineHeight: 1.6, overflowWrap: 'anywhere' }}>View your registered student information.</span>
+        </button>
+      </div>
+    </>
+  );
+}
+
+function InstitutionStudentLinking({ institutionId }: { institutionId: string }) {
+  const [students, setStudents] = useState<LinkedStudent[]>([]);
+  const [fdrs, setFdrs] = useState<AssignableFdr[]>([]);
+  const [email, setEmail] = useState('');
+  const [enrollment, setEnrollment] = useState('');
+  const [admissionVerified, setAdmissionVerified] = useState(false);
+  const [fdrId, setFdrId] = useState('');
+  const [studentId, setStudentId] = useState('');
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const refresh = () => getInstitutionStudentLinks(institutionId).then(data => { setStudents(data.students); setFdrs(data.fdrs); }).catch(reason => setMessage(reason instanceof Error ? reason.message : 'Could not load institution records.'));
+  useEffect(() => { void refresh(); }, [institutionId]);
+  return <>
+    <PageTitle overline="INSTITUTION ADMIN" title="Student linking" description="Verify admission records before connecting a student and assigning an FDR." />
+    <div className="dashboard-columns">
+      <Panel><PanelHeading title="Verify and link student" detail="Only confirm students after checking official admission records." />
+        <form style={{ display: 'grid', gap: 12, padding: 16 }} onSubmit={async event => { event.preventDefault(); if (!admissionVerified) return; setLoading(true); setMessage(''); try { await linkInstitutionStudent(institutionId, email, enrollment); setMessage('Student linked successfully.'); setEmail(''); setEnrollment(''); setAdmissionVerified(false); await refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not link student.'); } finally { setLoading(false); } }}>
+          <label htmlFor="link-email">Student account email</label><input id="link-email" type="email" required value={email} onChange={e => setEmail(e.target.value)} style={{ padding: 10 }} />
+          <label htmlFor="link-enrollment">Enrollment number</label><input id="link-enrollment" required value={enrollment} onChange={e => setEnrollment(e.target.value)} style={{ padding: 10 }} />
+          <label><input type="checkbox" checked={admissionVerified} onChange={e => setAdmissionVerified(e.target.checked)} /> I verified this student's admission in official institution records.</label>
+          <button className="button button-primary" disabled={!admissionVerified || loading} type="submit">Link student</button>
+        </form>
+      </Panel>
+      <Panel><PanelHeading title="Assign an FDR" detail="Assign an existing institution FDR to a verified student." />
+        <form style={{ display: 'grid', gap: 12, padding: 16 }} onSubmit={async event => { event.preventDefault(); setLoading(true); setMessage(''); try { await assignInstitutionFdr(institutionId, fdrId, studentId); setMessage('FDR assigned successfully.'); await refresh(); } catch (error) { setMessage(error instanceof Error ? error.message : 'Could not assign FDR.'); } finally { setLoading(false); } }}>
+          <label htmlFor="link-fdr">Unassigned FDR</label><select id="link-fdr" required value={fdrId} onChange={e => setFdrId(e.target.value)} style={{ padding: 10 }}><option value="">Choose FDR</option>{fdrs.filter(f => !f.studentId).map(f => <option key={f.id} value={f.id}>{f.reference} · {f.bankName}</option>)}</select>
+          <label htmlFor="link-student">Verified student</label><select id="link-student" required value={studentId} onChange={e => setStudentId(e.target.value)} style={{ padding: 10 }}><option value="">Choose student</option>{students.map(st => <option key={st.studentId} value={st.studentId}>{st.enrollment} · {st.course}</option>)}</select>
+          <button className="button button-primary" disabled={loading || !fdrId || !studentId} type="submit">Assign FDR</button>
+          <p>{students.length} verified students · {fdrs.filter(f => !f.studentId).length} unassigned FDRs</p>
+        </form>
+      </Panel>
+    </div>
+    {message && <p role="status" style={{ padding: 16 }}>{message}</p>}
+  </>;
+}
+
+function formatStudentDate(value: string) {
+  return value ? new Date(value).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+}
+function useStudentRecords() {
+  const [records, setRecords] = useState<StudentRecords | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    getStudentRecords().then(data => { if (active) { setRecords(data); setError(''); } }).catch(() => { if (active) setError('Could not load student records. Please refresh.'); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [revision]);
+  return { records, loading, error, refresh: () => setRevision(v => v + 1) };
+}
+
+function StudentPage({ screen, name, email, go }: {
+  screen: Screen;
+  name: string;
+  email: string;
+  go: (page: Screen) => void;
+}) {
+  const { records, loading, error, refresh } = useStudentRecords();
+  const [refundFdrId, setRefundFdrId] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundMessage, setRefundMessage] = useState('');
+  const [refundSending, setRefundSending] = useState(false);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
+const [profileError, setProfileError] = useState('');
+
+useEffect(() => {
+  if (screen !== 'student-profile') return;
+
+  let cancelled = false;
+
+  setProfileError('');
+
+  getStudentProfile()
+    .then((profile) => {
+      if (!cancelled) setStudentProfile(profile);
+    })
+    .catch(() => {
+      if (!cancelled) {
+        setProfileError('Could not load student details.');
+      }
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [screen]);
+  const pages: Partial<Record<Screen, { title: string; description: string; section: string; empty: string }>> = {
+    'student-fdrs': {
+      title: 'My FDRs', description: 'Your security deposit and fixed deposit records.',
+      section: 'My deposit records', empty: 'No FDRs are linked to your student account yet.',
+    },
+    'student-status': {
+      title: 'FDR Status', description: 'Track the review and verification status of your deposits.',
+      section: 'Application status', empty: 'No student FDR status updates are available yet.',
+    },
+    'student-documents': {
+      title: 'My Documents', description: 'View documents associated with your own deposits.',
+      section: 'My uploaded documents', empty: 'No documents are linked to your student account yet.',
+    },
+    'student-maturity': {
+      title: 'Maturity & Alerts', description: 'Track maturity dates and reminders for your deposits.',
+      section: 'Upcoming maturities', empty: 'No maturity reminders are available yet.',
+    },
+    'student-refunds': {
+      title: 'Refund Requests', description: 'Check the progress of your security deposit refund requests.',
+      section: 'My refund requests', empty: 'No refund requests are linked to your account yet.',
+    },
+    'student-profile': {
+      title: 'My Profile', description: 'Your student account information.',
+      section: 'Account details', empty: '',
+    },
+  };
+  const page = pages[screen];
+  if (!page) return null;
+  return (
+    <>
+      <PageTitle overline="STUDENT WORKSPACE" title={page.title} description={page.description}
+        action={<Button kind="secondary" onClick={() => go('dashboard')}>← Back to overview</Button>} />
+      <Panel className={screen === 'student-profile' ? 'student-profile-details' : ''}>
+        <PanelHeading title={page.section} detail={screen === 'student-profile'
+          ? 'Information from your signed-in account'
+          : 'Only your personal records will be displayed here.'} />
+          {profileError && screen === 'student-profile' && (
+  <p role="alert" style={{ color: '#c62828', fontSize: '15px', margin: '12px 0' }}>
+    {profileError}
+  </p>
+)}
+        {screen === 'student-profile' ? (
+  <div className="summary-grid">
+    <div>
+      <small>Full name</small>
+      <strong>{studentProfile?.name ?? name}</strong>
+    </div>
+
+    <div>
+      <small>Email</small>
+      <strong>{studentProfile?.email ?? email}</strong>
+    </div>
+
+    <div>
+      <small>Account type</small>
+      <strong>Student</strong>
+    </div>
+
+    <div>
+      <small>Phone Number</small>
+      <strong>{studentProfile?.phone ?? '—'}</strong>
+    </div>
+
+    <div>
+      <small>Enrollment Number</small>
+      <strong>{studentProfile?.enrollment ?? '—'}</strong>
+    </div>
+
+    <div>
+      <small>Course</small>
+      <strong>{studentProfile?.course ?? '—'}</strong>
+    </div>
+
+    <div>
+      <small>Institution Name</small>
+      <strong>{studentProfile?.institutionName ?? '—'}</strong>
+    </div>
+  </div>
+        ) : (
+          <div className="student-records" style={{ padding: '12px 4px', fontSize: 16, lineHeight: 1.7 }}>
+            {loading ? <p>Loading your records…</p> : error ? <p role="alert">{error}</p> : !records?.linked ? <p>Your institution has not linked your student account yet. Ask your institution administrator to verify your enrollment.</p> : (
+              <>
+                {screen === 'student-fdrs' && (records.fdrs.length ? records.fdrs.map(f => <div className="dashboard-state" key={f.id} style={{ marginBottom: 12 }}><strong>{f.reference} · {f.bankName}</strong><p>Amount: ₹{f.amount} {f.currency} | Issued: {formatStudentDate(f.issueDate)} | Maturity: {formatStudentDate(f.maturityDate)}</p></div>) : <p>{page.empty}</p>)}
+                {screen === 'student-status' && (records.fdrs.length ? records.fdrs.map(f => <div className="dashboard-state" key={f.id} style={{ marginBottom: 12 }}><strong>{f.reference}</strong><p>Review: {f.reviewStatus} | Verification: {f.verificationStatus} | State: {f.instrumentState}</p></div>) : <p>{page.empty}</p>)}
+                {screen === 'student-documents' && (records.documents.length ? records.documents.map(d => <div className="dashboard-state" key={d.id} style={{ marginBottom: 12 }}><strong>{d.name}</strong><p>Uploaded: {formatStudentDate(d.uploadedAt)} · Associated FDR: {records.fdrs.find(f => f.id === d.fdrId)?.reference ?? '—'}</p><small>Document access is restricted to institution-authorized download until a student-safe download endpoint is available.</small></div>) : <p>{page.empty}</p>)}
+                {screen === 'student-maturity' && (records.fdrs.length ? records.fdrs.map(f => <div className="dashboard-state" key={f.id} style={{ marginBottom: 12 }}><strong>{f.reference}</strong><p>Maturity: {formatStudentDate(f.maturityDate)} · {new Date(f.maturityDate).getTime() < Date.now() ? 'Matured' : `${Math.ceil((new Date(f.maturityDate).getTime() - Date.now()) / 86400000)} days remaining`}</p></div>) : <p>{page.empty}</p>)}
+                {screen === 'student-refunds' && <>
+                  {records.refunds.map(r => <div className="dashboard-state" key={r.id} style={{ marginBottom: 12 }}><strong>{records.fdrs.find(f => f.id === r.fdrId)?.reference ?? 'FDR'} · {r.status}</strong><p>{r.reason} · {formatStudentDate(r.createdAt)}</p></div>)}
+                  {!records.refunds.length && <p>{page.empty}</p>}
+                  {records.fdrs.length > 0 && <form onSubmit={async event => { event.preventDefault(); setRefundSending(true); setRefundMessage(''); try { await requestStudentRefund(refundFdrId, refundReason); setRefundMessage('Refund request submitted for institution review.'); setRefundReason(''); refresh(); } catch (reason) { setRefundMessage(reason instanceof Error ? reason.message : 'Request failed'); } finally { setRefundSending(false); } }} style={{ display: 'grid', gap: 12, maxWidth: 560, marginTop: 20 }}>
+                    <strong>Request a refund</strong>
+                    <label htmlFor="student-refund-fdr">Select your FDR</label>
+                    <select id="student-refund-fdr" value={refundFdrId} onChange={event => setRefundFdrId(event.target.value)} required style={{ padding: 10 }}><option value="">Choose FDR</option>{records.fdrs.map(f => <option key={f.id} value={f.id}>{f.reference} · {f.bankName}</option>)}</select>
+                    <label htmlFor="student-refund-reason">Reason (at least 10 characters)</label>
+                    <textarea id="student-refund-reason" value={refundReason} onChange={event => setRefundReason(event.target.value)} required minLength={10} maxLength={4000} rows={3} style={{ padding: 10 }} />
+                    <button className="button button-primary" type="submit" disabled={refundSending}>{refundSending ? 'Submitting…' : 'Submit refund request'}</button>
+                    {refundMessage && <p role="status">{refundMessage}</p>}
+                  </form>}
+                </>}
+              </>
+            )}
+          </div>
+        )}
+      </Panel>
+    </>
+  );
 }
 
 function Dashboard({ go, institutionId, onSessionExpired }: { go: (page: Screen) => void; institutionId: string; onSessionExpired: () => void }) {

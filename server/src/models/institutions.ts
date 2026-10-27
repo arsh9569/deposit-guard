@@ -61,5 +61,6 @@ institutionSchema.index(
 );
 institutionSchema.index({ status: 1, name: 1 }, { name: 'institution_status_name' });
 
-export const InstitutionModel =
-  mongoose.models.Institution ?? model<InstitutionRecord>('Institution', institutionSchema);
+export const InstitutionModel: mongoose.Model<InstitutionRecord> =
+  (mongoose.models.Institution as mongoose.Model<InstitutionRecord> | undefined) ??
+  model<InstitutionRecord>('Institution', institutionSchema);

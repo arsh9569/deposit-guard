@@ -479,3 +479,55 @@
     display: none;
   }
 }
+/* Student Profile readability */
+.student-profile-details {
+  padding: 28px !important;
+}
+
+.student-profile-details h2 {
+  font-size: 24px !important;
+  line-height: 1.3;
+  margin-bottom: 10px;
+}
+
+.student-profile-details p {
+  font-size: 16px !important;
+  line-height: 1.6;
+}
+
+.student-profile-details small,
+.student-profile-details label {
+  font-size: 15px !important;
+  line-height: 1.5;
+}
+
+.student-profile-details strong {
+  font-size: 19px !important;
+  line-height: 1.5;
+}
+/* Student dashboard quick-action cards: responsive text */
+.student-portal .quick-action-card,
+.student-portal .action-card {
+  min-width: 0;
+}
+
+.student-portal .quick-action-card strong,
+.student-portal .action-card strong {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .student-portal .quick-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .student-portal .quick-actions {
+    grid-template-columns: 1fr;
+  }
+}

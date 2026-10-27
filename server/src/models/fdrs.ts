@@ -16,6 +16,7 @@ import {
 
 export interface FdrRecord {
   institutionId: Types.ObjectId;
+  studentId?: Types.ObjectId;
   reference: string;
   instrumentNumber: string;
   bankName: string;
@@ -51,6 +52,10 @@ const fdrSchema = new Schema<FdrRecord>(
       required: true,
       immutable: true,
     },
+    studentId: {
+  type: Schema.Types.ObjectId,
+  ref: 'User',
+},
     reference: { type: String, required: function () { return this.submissionStatus !== 'draft'; }, trim: true, maxlength: 80 },
     instrumentNumber: { type: String, required: function () { return this.submissionStatus !== 'draft'; }, trim: true, maxlength: 120 },
     bankName: { type: String, required: function () { return this.submissionStatus !== 'draft'; }, trim: true, maxlength: 160 },
@@ -129,5 +134,8 @@ fdrSchema.index(
   { institutionId: 1, instrumentState: 1, maturityDate: 1 },
   { name: 'fdr_institution_state_maturity' },
 );
-
+fdrSchema.index(
+  { studentId: 1, maturityDate: 1 },
+  { name: 'fdr_student_maturity' },
+);
 export const FdrModel = mongoose.models.Fdr ?? model<FdrRecord>('Fdr', fdrSchema);

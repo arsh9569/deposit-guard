@@ -8,7 +8,7 @@ import { FdrModel, type FdrRecord } from '../models/fdrs.js';
 import { OcrCorrectionModel, OcrExtractionModel, type OcrCorrectionRecord, type OcrExtractionRecord } from '../models/ocr-extractions.js';
 import { fdrCreateSchema, fdrDraftSchema, fdrUpdateSchema, objectIdSchema, ocrCorrectionSchema } from '../validators/model-schemas.js';
 import { compareExtractedValues, findMissingExtractedFields, inspectDocument, isRealIsoDate, MAX_DOCUMENT_BYTES, noProviderExtractor, privateDocumentFilter, sanitizeOriginalFileName, storePrivateDocument, type DocumentExtractor } from '../services/fdr-document-processing.js';
-
+import { StudentProfileModel } from '../models/student-profiles.js';
 const roles = ['institution_admin', 'institution_operator'] as const;
 const fdrs = FdrModel as Model<FdrRecord>;
 const documents = DocumentModel as Model<DocumentRecord>;

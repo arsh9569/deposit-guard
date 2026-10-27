@@ -9,15 +9,19 @@ import type { AuditWriter, AuthRepository } from './auth/types.js';
 import { env } from './config/env.js';
 import { csrfProtection } from './middleware/csrf.js';
 import { requestIdMiddleware } from './middleware/request-id.js';
+import { registerRouter } from './routes/register.js';
 import { createAuthRouter } from './routes/auth.js';
 import { healthRouter } from './routes/health.js';
 import { createFdrSubmissionRouter } from './routes/fdr-submissions.js';
+import { createStudentLinkingRouter } from './routes/student-linking.js';
+import { studentPortalRouter } from './routes/student-portal.js';
 import type { DocumentExtractor } from './services/fdr-document-processing.js';
 import { createInstitutionWorkflowRouter } from './routes/institution-workflows.js';
 import type { NotificationDelivery } from './services/maturity-monitoring.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { apiErrorHandler } from './middleware/api-error.js';
 import { createVerificationRouter } from './routes/verification.js';
+import { otpRouter } from './routes/otp.js';
 
 export interface AppDependencies {
   repository?: AuthRepository;
@@ -67,9 +71,13 @@ export function createApp(dependencies: AppDependencies = {}) {
     }),
   );
   app.use('/api', csrfProtection);
+  app.use('/api/auth/register', registerRouter);
+  app.use('/api/auth/otp', otpRouter);
   app.use('/api/health', healthRouter);
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/institutions/:institutionId/fdr', createFdrSubmissionRouter(dependencies.documentExtractor));
+  app.use('/api/institutions/:institutionId/student-linking', createStudentLinkingRouter());
+  app.use('/api/student', studentPortalRouter);
   app.use('/api/institutions/:institutionId/verification', createVerificationRouter({ audit: dependencies.audit }));
   app.use('/api/institutions/:institutionId/workflows', createInstitutionWorkflowRouter({ audit: dependencies.audit, notificationDelivery: dependencies.notificationDelivery }));
   app.use(

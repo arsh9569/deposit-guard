@@ -1,3 +1,4 @@
+import { StudentProfileModel } from '../models/student-profiles.js';
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import type { AuthRepository, AuditWriter } from '../auth/types.js';
@@ -5,6 +6,7 @@ import { verifyPassword } from '../auth/passwords.js';
 import { createAuthenticationMiddleware } from '../middleware/authentication.js';
 import { csrfTokenHandler } from '../middleware/csrf.js';
 import { loginSchema } from '../validators/auth-schemas.js';
+
 
 const genericLoginError = { error: 'Invalid email or password' };
 
@@ -58,7 +60,7 @@ export function createAuthRouter(
       await new Promise<void>((resolve, reject) =>
         request.session.save((error) => (error ? reject(error) : resolve())),
       );
-      response.json({ user: publicUser(user) });
+      response.json({ user: await publicUser(user) });
     } catch (error) {
       if (request.session.userId) {
         request.session.destroy(() => undefined);
@@ -67,8 +69,9 @@ export function createAuthRouter(
     }
   });
 
-  router.get('/me', authentication, (request, response) => {
-    response.json({ user: publicUser(request.authUser!) });
+  router.get('/me', authentication, async (request, response, next) => {
+    try { response.json({ user: await publicUser(request.authUser!) }); }
+    catch (error) { next(error); }
   });
 
   router.post('/logout', async (request, response, next) => {
@@ -94,15 +97,50 @@ export function createAuthRouter(
       next(error);
     }
   });
+  router.get('/student-profile', authentication, async (request, response, next) => {
+  try {
+    const user = request.authUser!;
+
+    const profile = await StudentProfileModel.findOne({
+      userId: user._id,
+    }).lean();
+
+    if (!profile) {
+      response.status(404).json({ error: 'Student profile not found' });
+      return;
+    }
+
+    response.json({
+      profile: {
+        name: user.displayName,
+        email: user.email,
+        phone: profile.phone,
+        enrollment: profile.enrollment,
+        course: profile.course,
+        institutionName: profile.institutionName,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
   return router;
 }
 
-function publicUser(user: NonNullable<Awaited<ReturnType<AuthRepository['findById']>>>) {
+async function publicUser(
+  user: NonNullable<Awaited<ReturnType<AuthRepository['findById']>>>
+) {
+  const studentProfile = await StudentProfileModel.exists({
+    userId: user._id,
+  });
+
   return {
     id: String(user._id),
     email: user.email,
     displayName: user.displayName,
+    accountType: user.accountType ?? (studentProfile ? 'student' : undefined),
+    status: user.status,
     memberships: user.memberships
       .filter((membership) => membership.active)
       .map((membership) => ({
