@@ -65,7 +65,7 @@ type Screen =
   | 'student-refunds'
   | 'student-profile';
 type NavItem = { id: Screen; label: string; glyph: string; capability: string };
-const OCR_STORAGE_KEY = 'depositguard.demo.ocr-corrections.v2-amount-fixture';
+const OCR_STORAGE_KEY = 'nidhikosh.demo.ocr-corrections.v2-amount-fixture';
 const nav: NavItem[] = [
   { id: 'dashboard', label: 'Overview', glyph: '◫', capability: 'dashboard:read' },
   { id: 'student-linking', label: 'Student linking', glyph: '♙', capability: 'students:link' },
@@ -364,11 +364,9 @@ export function App() {
       )}
       <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
         <div className="brand">
-          <span className="brand-shield">✺</span>
-          <span>
-            <strong>AICTE</strong>
-            <small>SECURITY DEPOSIT &amp; FDR</small>
-          </span>
+  <span>
+    <strong>NidhiKosh</strong>
+  </span>
           <button
             className="mobile-menu-close"
             onClick={() => setMobileOpen(false)}
@@ -383,7 +381,6 @@ export function App() {
             <strong>{isStudent ? 'Student Portal' : 'Your institution'}</strong>
             <small>{isStudent ? 'Student workspace' : 'Institution workspace'}</small>
           </span>
-          <b>⌄</b>
         </div>
         <div className="nav-caption">WORKSPACE</div>
         <nav aria-label="Main navigation">
@@ -407,18 +404,6 @@ export function App() {
             <button onClick={() => setAssistantOpen(true)}>Ask the assistant</button>
           </span>
         </div>
-        <button className="sidebar-user" onClick={toggleProfile} title="Open profile" aria-haspopup="dialog" aria-expanded={profileOpen}>
-          <span className="avatar">{displayName?.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</span>
-          <span>
-<strong>{displayName}</strong>
-<small>
-  {isStudent
-    ? 'Student'
-    : activeMembership?.roles.join(', ') ?? 'No institution membership'}
-</small>
-          </span>
-          <b>···</b>
-        </button>
       </aside>
       <section className="page-shell">
         <header className="topbar">
@@ -609,7 +594,7 @@ export function App() {
         </main>
         <footer className="portal-footer">
           <span>
-            DepositGuard AI <b>·</b> Static workflow prototype
+            NidhiKosh <b>·</b> FDR management portal
           </span>
           <span>Policy thresholds shown are demo assumptions</span>
         </footer>
@@ -651,14 +636,14 @@ function WorkflowAssistant({ currentScreen, onClose, onNavigate }: { currentScre
   ];
   return (
     <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="workflow-assistant" role="dialog" aria-modal="true" aria-label="DepositGuard workflow assistant">
+      <section className="workflow-assistant" role="dialog" aria-modal="true" aria-label="NidhiKosh workflow assistant">
         <header>
           <BabyRobot className="assistant-robot" />
-          <span><strong>DepositGuard Assistant</strong><small>Ask me about your FDR workflows</small></span>
+          <span><strong>NidhiKosh Assistant</strong><small>Ask me about your FDR workflows</small></span>
           <button type="button" onClick={onClose} aria-label="Close assistant">×</button>
         </header>
         <div className="assistant-conversation" ref={conversationRef} aria-live="polite">
-          {messages.length === 0 ? <div className="assistant-welcome"><BabyRobot className="assistant-baby" /><p>Hi! I’m your DepositGuard helper. Ask me a question and I’ll help you find the next step.</p></div> : messages.map((message, index) => <div className={`assistant-message ${message.role}`} key={`${message.role}-${index}`}>{message.role === 'assistant' && <BabyRobot className="assistant-message-robot" />}<p>{message.content}</p></div>)}
+          {messages.length === 0 ? <div className="assistant-welcome"><BabyRobot className="assistant-baby" /><p>Hi! I’m your NidhiKosh assistant. Ask me a question and I’ll help you find the next step.</p></div> : messages.map((message, index) => <div className={`assistant-message ${message.role}`} key={`${message.role}-${index}`}>{message.role === 'assistant' && <BabyRobot className="assistant-message-robot" />}<p>{message.content}</p></div>)}
           {busy && <div className="assistant-message assistant"><BabyRobot className="assistant-message-robot" /><p className="assistant-typing">Thinking…</p></div>}
           {error && <div className="assistant-error" role="alert">{error}</div>}
           {messages.length === 0 && <div className="assistant-shortcuts">{shortcuts.map((item) => <button type="button" key={item.page} onClick={() => onNavigate(item.page)}>{item.label}</button>)}</div>}
@@ -736,12 +721,8 @@ function Login({
   return (
     <div className="aicte-login">
       <section className="aicte-hero">
-        <div className="aicte-identity">
-          <span className="aicte-emblem" aria-hidden="true">✺</span>
-          <span><strong>AICTE</strong><small>All India Council for Technical Education</small></span>
-        </div>
         <div className="aicte-hero-body">
-          <h1>Security Deposit &amp;<br />FDR Portal</h1>
+          <h1>NidhiKosh</h1>
           <p>Digitally submit, verify and manage FDR records for compliance.</p>
           <ul>
             <li><span>▣</span> Secure document submission</li>
@@ -1185,7 +1166,7 @@ function Dashboard({
       <PageTitle
         overline={dateLabel}
         title={`Good afternoon, ${displayName || data?.displayName || 'there'}`}
-        description="Live figures from your institution’s DepositGuard records."
+        description="Live figures from your institution’s NidhiKosh records."
         action={canCreateFdr ? <Button onClick={() => go('register')}>＋ &nbsp;Register an FDR</Button> : undefined}
       />
       {error && <div className={`dashboard-state ${error.denied ? 'state-denied' : 'state-error'}`} role="alert">
@@ -2040,8 +2021,10 @@ function Verification({ institutionId, roles }: { institutionId: string; roles: 
   const [busyInstrumentId, setBusyInstrumentId] = useState('');
   const [error, setError] = useState('');
   const canInitiate = permissionsFor(roles).has('verification:run');
+  const fixtures = instruments.filter((item) => /^FDR-2026-02[1-4]$/.test(item.reference));
   useEffect(() => {
     let active = true;
+    setLoading(true); setInstruments([]); setAttempts([]); setError('');
     Promise.all([getVerificationInstruments(institutionId), getVerificationAttempts(institutionId)])
       .then(([available, history]) => { if (active) { setInstruments(available); setAttempts(history); setError(''); } })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'Verification data could not be loaded.'); })
@@ -2063,20 +2046,10 @@ function Verification({ institutionId, roles }: { institutionId: string; roles: 
         title="Verification record"
         description="Run and review deterministic provider fixtures. Every response is recorded as simulated, never bank confirmation."
       />
-      <div className="simulation-warning">
-        <div className="warning-mark">◇</div>
-        <div>
-          <strong>SIMULATED PROVIDER RESPONSES — NOT BANK CONFIRMED</strong>
-          <p>
-            These deterministic fixtures do not contact a bank and cannot establish that an FDR is genuine.
-          </p>
-        </div>
-        <Tag tone="blue">DEMO ONLY</Tag>
-      </div>
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       <Panel>
         <PanelHeading title="Available verification fixtures" detail="Initiation is restricted to institution operators and administrators." />
-        {loading ? <div role="status">Loading verification fixtures…</div> : instruments.filter((item) => /^FDR-2026-02[1-4]$/.test(item.reference)).map((instrument) => (
+        {loading ? <div role="status">Loading verification fixtures…</div> : error ? null : fixtures.length === 0 ? <div className="dashboard-empty">No verification fixtures are available for this institution.</div> : fixtures.map((instrument) => (
           <div className="attempt-row" key={instrument.id}>
             <span>◇</span>
             <div><strong>{instrument.reference}</strong><small>{instrument.bankName} · ₹{Number(instrument.principalAmount).toLocaleString('en-IN')}</small></div>
@@ -2602,7 +2575,7 @@ function AuditReports() {
     const url = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'depositguard-demo-audit.csv';
+    link.download = 'nidhikosh-audit.csv';
     link.click();
     URL.revokeObjectURL(url);
   };

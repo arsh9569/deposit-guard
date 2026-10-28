@@ -23,7 +23,9 @@ export function createVerificationRouter(dependencies: { provider?: Verification
   router.get('/instruments', requireInstitutionPermission('verification:read'), async (req, res, next) => {
     try {
       const institutionId = new Types.ObjectId(req.institutionScope!.institutionId);
-      const records = await fdrs.find({ institutionId }).sort({ reference: 1 }).limit(200).select('_id reference bankName principalAmount').lean().exec();
+      // Draft uploads may not have extracted fields yet. Filter before applying
+      // the limit so incomplete drafts cannot hide available instruments.
+      const records = await fdrs.find({ institutionId, reference: { $type: 'string', $ne: '' }, bankName: { $type: 'string', $ne: '' }, principalAmount: { $type: 'decimal' } }).sort({ reference: 1 }).limit(200).select('_id reference bankName principalAmount').lean().exec();
       res.json({ instruments: records.map((record) => ({ id: String(record._id), reference: record.reference, bankName: record.bankName, principalAmount: record.principalAmount.toString() })) });
     } catch (error) { next(error); }
   });
@@ -48,6 +50,10 @@ export function createVerificationRouter(dependencies: { provider?: Verification
       const institutionId = new Types.ObjectId(req.institutionScope!.institutionId);
       const instrument = await fdrs.findOne({ _id: parsed.data.instrumentId, institutionId }).exec();
       if (!instrument) { res.status(404).json({ error: 'Instrument not found' }); return; }
+      if (!instrument.reference || !instrument.bankName || !instrument.principalAmount || !instrument.holderName) {
+        res.status(409).json({ error: 'Complete the instrument details before requesting verification.' });
+        return;
+      }
       const timestamp = now();
       const result = await provider.verify({ reference: instrument.reference, bankName: instrument.bankName, principalAmount: instrument.principalAmount.toString(), holderName: instrument.holderName });
       const attempt = await attempts.create({

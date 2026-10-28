@@ -5,6 +5,8 @@ export const apiErrorHandler: ErrorRequestHandler = (error, request, response, n
   // Do not serialize exception messages or stacks: database errors can contain URIs and payloads.
   console.error(JSON.stringify({
     event: 'request_failed',
+    method: request.method,
+    route: request.route?.path ?? 'unmatched',
     requestId: request.requestId,
     errorType: error instanceof Error ? error.constructor.name : 'UnknownError',
   }));

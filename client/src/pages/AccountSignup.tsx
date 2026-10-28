@@ -172,23 +172,12 @@ const handleVerifyOtp = async () => {
     <main className="dg-signup">
       <aside className="dg-signup-hero">
         <div className="dg-brand">
-          <div className="dg-brand-icon">✺</div>
-          <div>
-            <strong>AICTE</strong>
-            <span>Security Deposit & FDR Portal</span>
-          </div>
-        </div>
+  <strong>NidhiKosh</strong>
+</div>
 
         <div className="dg-hero-content">
-          <div className="dg-eyebrow">
-            DEPOSIT GUARD PLATFORM
-          </div>
 
-          <h1>
-            Secure Deposits.
-            <br />
-            <span>Smarter Compliance.</span>
-          </h1>
+       <h1>NidhiKosh</h1>
 
           <p>
             A unified digital platform for secure FDR records,

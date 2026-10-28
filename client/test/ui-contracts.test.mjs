@@ -46,8 +46,8 @@ test('synthetic seed contains every requested walkthrough scenario and preserves
   assert.match(demo, /₹24,50,000 against submitted ₹25,00,000/);
 });
 
-test('verification UI reads recorded outcomes and keeps Not Bank Confirmed visible', () => {
-  assert.match(app, /SIMULATED PROVIDER RESPONSES — NOT BANK CONFIRMED/);
+test('verification UI reads recorded outcomes without the demo banner and keeps non-confirmation visible', () => {
+  assert.doesNotMatch(app, /SIMULATED PROVIDER RESPONSES — NOT BANK CONFIRMED/);
   assert.match(app, /attempt\.label/);
   assert.match(app, /A simulated match is not genuine bank verification/);
   assert.match(app, /No bank was contacted/);

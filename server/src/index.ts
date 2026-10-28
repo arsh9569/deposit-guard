@@ -6,7 +6,7 @@ import { shutdownOcrEngine } from './services/tesseract-ocr.js';
 try {
   await connectDatabase();
   const server = app.listen(env.PORT, () => {
-    console.info(`DepositGuard API listening on port ${env.PORT}`);
+    console.info(`NidhiKosh API listening on port ${env.PORT}`);
   });
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.once(signal, () => {

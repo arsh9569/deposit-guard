@@ -1,9 +1,10 @@
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
 if (process.env.NODE_ENV !== 'production') {
-  dotenv.config({ path: '.env' });
-  dotenv.config({ path: '.env.development', override: true });
+  dotenv.config({ path: fileURLToPath(new URL('../../.env', import.meta.url)) });
+  dotenv.config({ path: fileURLToPath(new URL('../../.env.development', import.meta.url)), override: true });
 }
 
 const envSchema = z.object({
@@ -17,7 +18,8 @@ const envSchema = z.object({
   SMTP_USER: z.string().email().optional(),
   SMTP_APP_PASSWORD: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().trim().optional(),
-  OPENAI_MODEL: z.string().trim().min(1).default('gpt-6-astra'),
+  OPENAI_MODEL: z.string().trim().min(1).default('gpt-4o-mini'),
+  OPENAI_BASE_URL: z.string().url().optional(),
 });
 
 export const env = envSchema.parse(process.env);

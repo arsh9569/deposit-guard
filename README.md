@@ -1,6 +1,6 @@
-# DepositGuard AI
+# NidhiKosh
 
-Secure FDR and security deposit workflow portal starter for Smart India Hackathon 2026, AICTE PS 26265.
+Secure FDR and security deposit workflow portal for Smart India Hackathon 2026, AICTE PS 26265.
 
 This repository contains the initial application foundation, not a complete portal. Bank checks are not implemented as real verification; any future demo adapter must label its results as simulated.
 

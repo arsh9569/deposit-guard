@@ -17,6 +17,10 @@ export function createAuthRouter(
   production = false,
 ): Router {
   const router = Router();
+  router.use((_request, response, next) => {
+    response.setHeader('Cache-Control', 'no-store');
+    next();
+  });
   const authentication = createAuthenticationMiddleware(repository);
   const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -92,7 +96,7 @@ export function createAuthRouter(
         requestId: request.requestId,
         metadataRedacted: { field: 'displayName' },
       });
-      response.json({ user: publicUser(user) });
+      response.json({ user: await publicUser(user) });
     } catch (error) {
       next(error);
     }

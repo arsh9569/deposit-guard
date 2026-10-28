@@ -35,3 +35,7 @@
 .aicte-alert {padding:10px 12px;background:#fff1f0;color:#a12b25;border:1px solid #f5c9c6;border-radius:5px;font-size:12px;margin-bottom:16px;}
 @media(max-width:760px) {.aicte-login{grid-template-columns:1fr}.aicte-hero{min-height:300px;padding:28px}.aicte-hero-body{margin:35px 0}.aicte-hero-body h1{font-size:34px}.aicte-hero-body p{font-size:14px}.aicte-hero-body ul{display:none}.aicte-access{padding:24px 16px}.aicte-card{padding:28px 22px}}
 @media(max-width:380px) {.aicte-form-options{align-items:flex-start;flex-direction:column}.aicte-hero{min-height:260px}.aicte-hero-footer{font-size:9px;letter-spacing:1px}}
+.aicte-login {
+  height: 100dvh;
+  overflow: hidden;
+}

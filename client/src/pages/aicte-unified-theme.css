@@ -651,7 +651,6 @@
 .portal .discrepancy-card > section,
 .portal .verification-result p,
 .portal .verification-aside p,
-.portal .simulation-warning p,
 .portal .adapter-note,
 .portal .processing-panel > p,
 .portal .processing-status strong,
@@ -660,7 +659,6 @@
 .portal .decision-history > strong,
 .portal .decision-history span b { font-size: var(--type-supporting) !important; line-height: 1.5; }
 .portal .discrepancy-card > div > strong { font-size: var(--type-card-title); }
-.portal .simulation-warning strong,
 .portal .response-card > div small { font-size: var(--type-supporting); }
 .portal .extract-field { font-size: var(--type-control); line-height: 1.4; }
 .portal .extract-columns,

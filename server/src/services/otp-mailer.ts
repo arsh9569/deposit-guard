@@ -21,11 +21,11 @@ export async function sendOtpEmail(
   });
 
   await transporter.sendMail({
-    from: `"Deposit Guard" <${smtpUser}>`,
+    from: `"NidhiKosh" <${smtpUser}>`,
     to: recipientEmail,
-    subject: 'Deposit Guard - Email Verification OTP',
+    subject: 'NidhiKosh - Email Verification OTP',
     text: [
-      'Welcome to Deposit Guard!',
+      'Welcome to NidhiKosh!',
       '',
       `Your email verification code is: ${otp}`,
       '',
@@ -34,7 +34,7 @@ export async function sendOtpEmail(
     ].join('\n'),
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;padding:28px;border:1px solid #e2e8f0;border-radius:12px">
-        <h2 style="color:#173a60">Deposit Guard</h2>
+        <h2 style="color:#173a60">NidhiKosh</h2>
         <p>Email Verification</p>
         <p>Use the following code to verify your email address:</p>
         <div style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#175da5;padding:20px;background:#eef4fc;text-align:center;border-radius:8px">

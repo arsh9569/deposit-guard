@@ -2,7 +2,7 @@ export default function StudentDashboard() {
   return (
     <main style={{ padding: '40px', maxWidth: '1100px', margin: '0 auto' }}>
       <h1>Student Dashboard</h1>
-      <p>Welcome to Deposit Guard â€” Student Portal</p>
+      <p>Welcome to NidhiKosh — Student Portal</p>
 
       <section
         style={{
