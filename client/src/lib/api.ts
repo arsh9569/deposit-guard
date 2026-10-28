@@ -67,6 +67,21 @@ export interface VerificationAttempt {
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
+
+const unexpectedApiResponseMessage =
+  'The API returned an unexpected response. Check the API routing configuration and try again.';
+
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await globalThis.fetch(input, init);
+  if (response.status === 204) return response;
+
+  const contentType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+  if (contentType !== 'application/json' && !contentType?.endsWith('+json')) {
+    throw new ApiError(unexpectedApiResponseMessage, response.status);
+  }
+  return response;
+}
+
 export function getSupportedFdrMimeType(file: Pick<File, 'name' | 'type'>): 'application/pdf' | 'image/jpeg' | 'image/png' | null {
   const supported = ['application/pdf', 'image/jpeg', 'image/png'] as const;
   if (supported.includes(file.type as (typeof supported)[number])) return file.type as (typeof supported)[number];
@@ -96,20 +111,20 @@ export interface OcrUploadResult {
 }
 
 async function getCsrfToken(message: string): Promise<string> {
-  const response = await fetch('/api/auth/csrf', { credentials: 'include' });
+  const response = await apiFetch('/api/auth/csrf', { credentials: 'include' });
   if (!response.ok) throw new ApiError(message, response.status);
   return ((await response.json()) as { csrfToken: string }).csrfToken;
 }
 
 export async function getCurrentUser(): Promise<PortalUser | null> {
-  const response = await fetch('/api/auth/me', { credentials: 'include' });
+  const response = await apiFetch('/api/auth/me', { credentials: 'include' });
   if (response.status === 401) return null;
   if (!response.ok) throw new ApiError('Could not restore your session. Try refreshing the page.', response.status);
   return ((await response.json()) as { user: PortalUser }).user;
 }
 
 export async function sendAssistantMessage(messages: AssistantChatMessage[], currentScreen: string): Promise<string> {
-  const response = await fetch('/api/assistant/chat', {
+  const response = await apiFetch('/api/assistant/chat', {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', ...(await csrfHeader('Could not start a secure assistant request.')) },
@@ -123,7 +138,7 @@ export async function sendAssistantMessage(messages: AssistantChatMessage[], cur
 
 export async function updateUsername(displayName: string): Promise<PortalUser> {
   const csrfToken = await getCsrfToken('Could not start a secure profile update.');
-  const response = await fetch('/api/auth/profile', {
+  const response = await apiFetch('/api/auth/profile', {
     method: 'PATCH', credentials: 'include',
     headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken },
     body: JSON.stringify({ displayName }),
@@ -137,7 +152,7 @@ export async function updateUsername(displayName: string): Promise<PortalUser> {
 
 export async function signOut(): Promise<void> {
   const csrfToken = await getCsrfToken('Could not start a secure sign-out request.');
-  const response = await fetch('/api/auth/logout', {
+  const response = await apiFetch('/api/auth/logout', {
     method: 'POST', credentials: 'include', headers: { 'x-csrf-token': csrfToken },
   });
   if (!response.ok) throw new ApiError('Sign out failed. Please try again.', response.status);
@@ -145,7 +160,7 @@ export async function signOut(): Promise<void> {
 
 export async function signIn(email: string, password: string): Promise<PortalUser> {
   const csrfToken = await getCsrfToken('Could not start a secure sign-in session.');
-  const response = await fetch('/api/auth/login', {
+  const response = await apiFetch('/api/auth/login', {
     method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken },
     body: JSON.stringify({ email, password }),
   });
@@ -171,7 +186,7 @@ export async function uploadFdrForOcr(institutionId: string, file: File, form: P
     instrumentId = await createFdrDraft(institutionId, draftValues);
   }
   const uploadHeaders = await csrfHeader('Could not start a secure document upload.');
-  const response = await fetch(`${base}/drafts/${encodeURIComponent(instrumentId)}/documents`, {
+  const response = await apiFetch(`${base}/drafts/${encodeURIComponent(instrumentId)}/documents`, {
     method: 'POST', credentials: 'include',
     headers: { ...uploadHeaders, 'content-type': mimeType, 'x-file-name': file.name },
     body: file,
@@ -192,7 +207,7 @@ export async function uploadFdrForOcr(institutionId: string, file: File, form: P
 
 export async function createFdrDraft(institutionId: string, values: Record<string, string>): Promise<string> {
   const headers = await csrfHeader('Could not start a secure draft save.');
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/fdr/drafts`, {
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/fdr/drafts`, {
     method: 'POST', credentials: 'include',
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify(Object.fromEntries(Object.entries(values).filter(([, value]) => value?.trim()))),
@@ -204,7 +219,7 @@ export async function createFdrDraft(institutionId: string, values: Record<strin
 
 export async function saveOcrCorrection(institutionId: string, result: OcrUploadResult, fieldName: string, correctedValue: string): Promise<void> {
   const headers = await csrfHeader('Could not start a secure correction request.');
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/fdr/corrections`, {
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/fdr/corrections`, {
     method: 'POST', credentials: 'include',
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({ extractionId: result.extractionId, instrumentId: result.instrumentId, fieldName, correctedValue, reason: 'User correction during OCR review' }),
@@ -217,7 +232,7 @@ export async function saveOcrCorrection(institutionId: string, result: OcrUpload
 
 export async function updateFdrDraft(institutionId: string, instrumentId: string, values: Record<string, string>): Promise<void> {
   const headers = await csrfHeader('Could not start a secure draft update.');
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/fdr/drafts/${encodeURIComponent(instrumentId)}`, {
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/fdr/drafts/${encodeURIComponent(instrumentId)}`, {
     method: 'PATCH', credentials: 'include',
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify(values),
@@ -230,7 +245,7 @@ export async function updateFdrDraft(institutionId: string, instrumentId: string
 
 export async function submitFdrDraft(institutionId: string, instrumentId: string): Promise<void> {
   const headers = await csrfHeader('Could not start a secure submission request.');
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/fdr/drafts/${encodeURIComponent(instrumentId)}/submit`, {
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/fdr/drafts/${encodeURIComponent(instrumentId)}/submit`, {
     method: 'POST', credentials: 'include', headers,
   });
   if (!response.ok) {
@@ -240,7 +255,7 @@ export async function submitFdrDraft(institutionId: string, instrumentId: string
 }
 
 export async function getDashboard(institutionId: string): Promise<DashboardResponse> {
-  const response = await fetch(`/api/dashboard?institutionId=${encodeURIComponent(institutionId)}`, { credentials: 'include' });
+  const response = await apiFetch(`/api/dashboard?institutionId=${encodeURIComponent(institutionId)}`, { credentials: 'include' });
   if (!response.ok) {
     const message = response.status === 403 ? 'You do not have permission to view this institution dashboard.' : response.status === 401 ? 'Your session expired. Sign in again.' : 'Dashboard data could not be loaded.';
     throw new ApiError(message, response.status);
@@ -249,20 +264,20 @@ export async function getDashboard(institutionId: string): Promise<DashboardResp
 }
 
 export async function getNotifications(institutionId: string): Promise<PortalNotification[]> {
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/workflows/notifications`, { credentials: 'include' });
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/workflows/notifications`, { credentials: 'include' });
   if (!response.ok) throw new ApiError('Could not load notifications.', response.status);
   return ((await response.json()) as { notifications: PortalNotification[] }).notifications;
 }
 
 export async function getInstitutionUsers(institutionId: string): Promise<InstitutionUser[]> {
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/users`, { credentials: 'include' });
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/users`, { credentials: 'include' });
   const body = await response.json().catch(() => ({})) as { users?: InstitutionUser[]; error?: string };
   if (!response.ok) throw new ApiError(body.error ?? 'Could not load institution users.', response.status);
   return body.users ?? [];
 }
 
 export async function createInstitutionUser(institutionId: string, details: { email: string; displayName: string; role: InstitutionRole }): Promise<{ user: InstitutionUser; temporaryPassword: string }> {
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/users`, {
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/users`, {
     method: 'POST', credentials: 'include',
     headers: { 'content-type': 'application/json', ...(await csrfHeader('Could not start a secure user creation request.')) },
     body: JSON.stringify(details),
@@ -273,7 +288,7 @@ export async function createInstitutionUser(institutionId: string, details: { em
 }
 
 export async function updateInstitutionUserAccess(institutionId: string, userId: string, access: { roles: InstitutionRole[]; status: 'active' | 'suspended' }): Promise<InstitutionUser> {
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/users/${encodeURIComponent(userId)}/access`, {
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/users/${encodeURIComponent(userId)}/access`, {
     method: 'PATCH', credentials: 'include',
     headers: { 'content-type': 'application/json', ...(await csrfHeader('Could not start a secure access update.')) },
     body: JSON.stringify(access),
@@ -284,22 +299,22 @@ export async function updateInstitutionUserAccess(institutionId: string, userId:
 }
 
 export async function getVerificationInstruments(institutionId: string): Promise<VerificationInstrument[]> {
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/verification/instruments`, { credentials: 'include' });
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/verification/instruments`, { credentials: 'include' });
   if (!response.ok) throw new ApiError(response.status === 403 ? 'You cannot review verification attempts for this institution.' : 'Verification instruments could not be loaded.', response.status);
   return ((await response.json()) as { instruments: VerificationInstrument[] }).instruments;
 }
 
 export async function getVerificationAttempts(institutionId: string): Promise<VerificationAttempt[]> {
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/verification/attempts`, { credentials: 'include' });
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/verification/attempts`, { credentials: 'include' });
   if (!response.ok) throw new ApiError(response.status === 403 ? 'You cannot review verification attempts for this institution.' : 'Verification history could not be loaded.', response.status);
   return ((await response.json()) as { attempts: VerificationAttempt[] }).attempts;
 }
 
 export async function runVerificationAttempt(institutionId: string, instrumentId: string): Promise<VerificationAttempt> {
-  const csrfResponse = await fetch('/api/auth/csrf', { credentials: 'include' });
+  const csrfResponse = await apiFetch('/api/auth/csrf', { credentials: 'include' });
   if (!csrfResponse.ok) throw new ApiError('Could not start a secure verification request.', csrfResponse.status);
   const { csrfToken } = (await csrfResponse.json()) as { csrfToken: string };
-  const response = await fetch(`/api/institutions/${encodeURIComponent(institutionId)}/verification/attempts`, {
+  const response = await apiFetch(`/api/institutions/${encodeURIComponent(institutionId)}/verification/attempts`, {
     method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken },
     body: JSON.stringify({ instrumentId }),
   });
@@ -308,7 +323,7 @@ export async function runVerificationAttempt(institutionId: string, instrumentId
 }
 
 export async function getHealth(): Promise<HealthResponse> {
-  const response = await fetch('/api/health');
+  const response = await apiFetch('/api/health');
   if (!response.ok && response.status !== 503) {
     throw new Error(`API health request failed (${response.status})`);
   }
@@ -317,7 +332,7 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export async function sendSignupOtp(email: string): Promise<void> {
-  const csrfResponse = await fetch('/api/auth/csrf', {
+  const csrfResponse = await apiFetch('/api/auth/csrf', {
     credentials: 'include',
   });
 
@@ -332,7 +347,7 @@ export async function sendSignupOtp(email: string): Promise<void> {
     csrfToken: string;
   };
 
-  const response = await fetch('/api/auth/otp/send', {
+  const response = await apiFetch('/api/auth/otp/send', {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -359,7 +374,7 @@ export async function verifySignupOtp(
   email: string,
   otp: string,
 ): Promise<void> {
-  const csrfResponse = await fetch('/api/auth/csrf', {
+  const csrfResponse = await apiFetch('/api/auth/csrf', {
     credentials: 'include',
   });
 
@@ -374,7 +389,7 @@ export async function verifySignupOtp(
     csrfToken: string;
   };
 
-  const response = await fetch('/api/auth/otp/verify', {
+  const response = await apiFetch('/api/auth/otp/verify', {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -412,7 +427,7 @@ export interface SignupRegistration {
 export async function registerAccount(
   data: SignupRegistration,
 ): Promise<string> {
-  const csrfResponse = await fetch('/api/auth/csrf', {
+  const csrfResponse = await apiFetch('/api/auth/csrf', {
     credentials: 'include',
   });
 
@@ -427,7 +442,7 @@ export async function registerAccount(
     csrfToken: string;
   };
 
-  const response = await fetch('/api/auth/register', {
+  const response = await apiFetch('/api/auth/register', {
     method: 'POST',
     credentials: 'include',
     headers: {
@@ -461,7 +476,7 @@ export interface StudentProfile {
 }
 
 export async function getStudentProfile(): Promise<StudentProfile> {
-  const response = await fetch('/api/auth/student-profile', {
+  const response = await apiFetch('/api/auth/student-profile', {
     credentials: 'include',
   });
 
@@ -486,15 +501,15 @@ export interface StudentRecords {
   refunds: { id: string; fdrId: string; status: string; reason: string; createdAt: string }[];
 }
 export async function getStudentRecords(): Promise<StudentRecords> {
-  const response = await fetch('/api/student/records', { credentials: 'include' });
+  const response = await apiFetch('/api/student/records', { credentials: 'include' });
   if (!response.ok) throw new ApiError('Could not load your deposit records.', response.status);
   return response.json() as Promise<StudentRecords>;
 }
 export async function requestStudentRefund(fdrId: string, reason: string): Promise<void> {
-  const tokenResponse = await fetch('/api/auth/csrf', { credentials: 'include' });
+  const tokenResponse = await apiFetch('/api/auth/csrf', { credentials: 'include' });
   if (!tokenResponse.ok) throw new ApiError('Could not validate session.', tokenResponse.status);
   const { csrfToken } = await tokenResponse.json() as { csrfToken: string };
-  const response = await fetch('/api/student/refunds', { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken }, body: JSON.stringify({ fdrId, reason }) });
+  const response = await apiFetch('/api/student/refunds', { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken }, body: JSON.stringify({ fdrId, reason }) });
   if (!response.ok) {
     const result = await response.json().catch(() => ({})) as { error?: string };
     throw new ApiError(result.error ?? 'Refund request failed.', response.status);
@@ -502,10 +517,10 @@ export async function requestStudentRefund(fdrId: string, reason: string): Promi
 }
 
 async function institutionAdminApi(path: string, method = 'GET', body?: unknown) {
-  const csrfResponse = method === 'GET' ? null : await fetch('/api/auth/csrf', { credentials: 'include' });
+  const csrfResponse = method === 'GET' ? null : await apiFetch('/api/auth/csrf', { credentials: 'include' });
   if (csrfResponse && !csrfResponse.ok) throw new ApiError('Session validation failed.', csrfResponse.status);
   const csrfToken = csrfResponse ? (await csrfResponse.json() as { csrfToken: string }).csrfToken : undefined;
-  const response = await fetch(path, { method, credentials: 'include', headers: body ? { 'content-type': 'application/json', 'x-csrf-token': csrfToken! } : undefined, body: body ? JSON.stringify(body) : undefined });
+  const response = await apiFetch(path, { method, credentials: 'include', headers: body ? { 'content-type': 'application/json', 'x-csrf-token': csrfToken! } : undefined, body: body ? JSON.stringify(body) : undefined });
   const result = await response.json().catch(() => ({})) as Record<string, unknown>;
   if (!response.ok) throw new ApiError(typeof result.error === 'string' ? result.error : 'Request failed.', response.status);
   return result;

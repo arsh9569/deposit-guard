@@ -5,7 +5,25 @@ import { test } from 'node:test';
 const app = await readFile(new URL('../src/pages/App.tsx', import.meta.url), 'utf8');
 const styles = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
 const demo = await readFile(new URL('../src/features/demo-data.ts', import.meta.url), 'utf8');
+const api = await readFile(new URL('../src/lib/api.ts', import.meta.url), 'utf8');
+const vercel = JSON.parse(await readFile(new URL('../vercel.json', import.meta.url), 'utf8'));
 const provider = await readFile(new URL('../../server/src/services/verification-provider.ts', import.meta.url), 'utf8');
+
+test('production API traffic is rewritten to Render before the SPA fallback', () => {
+  assert.deepEqual(vercel.rewrites[0], {
+    source: '/api/(.*)',
+    destination: 'https://nidhikosh.onrender.com/api/$1',
+  });
+  assert.equal(vercel.rewrites[1].destination, '/index.html');
+});
+
+test('API client rejects non-JSON responses with a safe routing error before parsing', () => {
+  assert.match(api, /async function apiFetch\(/);
+  assert.match(api, /response\.headers\.get\('content-type'\)/);
+  assert.match(api, /unexpectedApiResponseMessage/);
+  assert.equal([...api.matchAll(/\bfetch\(/g)].length, 1, 'API calls should pass through the response guard');
+  assert.match(api, /apiFetch\('\/api\/auth\/login',\s*\{\s*method: 'POST'/);
+});
 
 test('mobile layout has tablet and phone breakpoints that collapse the sidebar and columns', () => {
   assert.match(styles, /@media\s*\(max-width:\s*900px\)/);

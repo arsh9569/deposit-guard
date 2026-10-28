@@ -23,6 +23,15 @@ hops. Do not remove Secure, CSRF, or institution membership checks to suppress 4
 Authentication responses now disable caching. Profile updates also await the
 asynchronous public-user serializer before responding.
 
+In production, Vercel must rewrite `/api/*` to
+`https://nidhikosh.onrender.com/api/*` before its SPA fallback rewrite. The browser
+continues to call same-origin `/api/...` URLs, so the existing `HttpOnly`,
+`SameSite=Strict`, `Secure` session cookie remains usable without enabling
+cross-site cookies. No `VITE_API_URL` variable is currently read by the client.
+Set the Render `CLIENT_ORIGIN` environment variable to the exact deployed frontend
+origin, `https://nidhikosh-app.vercel.app`, so the backend CORS allowlist matches
+production as well as local development.
+
 Server environment files resolve relative to the server module, independent of the
 working directory: `.env` then `.env.development` overrides during development.
 Production reads injected environment variables only. Restart the backend after
