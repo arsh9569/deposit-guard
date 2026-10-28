@@ -16,6 +16,7 @@
 - A login is possible only for an active account with a provisioned bcrypt hash. No credentials or demo accounts are shipped. Account invitations, password setup/reset, MFA, and recovery are out of scope.
 - The institution path parameter is treated only as a requested selector; membership authorization turns it into trusted scope. Routes must not query domain data directly using a body/header institution ID.
 - Login throttling uses Express's client IP. Set `TRUST_PROXY_HOPS` to the exact trusted ingress hop count when TLS or client traffic is forwarded through a load balancer. Incorrect proxy trust can allow IP spoofing or prevent the secure cookie from being issued.
+- On the Render production deployment, set `TRUST_PROXY_HOPS=1` so Express recognizes HTTPS forwarded by Render and can issue the `Secure` session cookie. Do not remove the `Secure` cookie flag to work around missing proxy trust.
 - Tests use synthetic users and Express's in-memory session store. Production app wiring uses MongoDB sessions and the real user repository. No external identity provider or bank verification is implied.
 
 ## Before production deployment

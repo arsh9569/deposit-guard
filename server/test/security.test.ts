@@ -199,6 +199,35 @@ test('CSRF token is required for state-changing requests', async () => {
   assert.equal(response.status, 403);
 });
 
+test('production secure session cookies are issued only when the trusted TLS proxy is configured', async () => {
+  const createCookieApp = (trustProxyHops: number) => {
+    const app = express();
+    app.set('trust proxy', trustProxyHops);
+    app.use(
+      session({
+        name: '__Host-depositguard.sid',
+        secret: 'test-only-session-secret-not-for-deployment',
+        resave: false,
+        saveUninitialized: false,
+        cookie: { httpOnly: true, secure: true, sameSite: 'strict', path: '/' },
+      }),
+    );
+    app.get('/api/auth/csrf', (req, res) => {
+      req.session.csrfToken = 'synthetic-csrf-token';
+      res.json({ csrfToken: req.session.csrfToken });
+    });
+    return app;
+  };
+
+  const forwardedRequest = (app: express.Express) =>
+    request(app).get('/api/auth/csrf').set('x-forwarded-proto', 'https');
+  const untrusted = await forwardedRequest(createCookieApp(0)).expect(200);
+  assert.equal(untrusted.headers['set-cookie'], undefined);
+
+  const trusted = await forwardedRequest(createCookieApp(1)).expect(200);
+  assert.match(trusted.headers['set-cookie']?.[0] ?? '', /__Host-depositguard\.sid=.*; Path=\/; HttpOnly; Secure; SameSite=Strict/);
+});
+
 test('unknown and wrong-password login attempts return the same generic response', async () => {
   const app = makeApp();
   const firstAgent = request.agent(app);

@@ -28,9 +28,20 @@ In production, Vercel must rewrite `/api/*` to
 continues to call same-origin `/api/...` URLs, so the existing `HttpOnly`,
 `SameSite=Strict`, `Secure` session cookie remains usable without enabling
 cross-site cookies. No `VITE_API_URL` variable is currently read by the client.
-Set the Render `CLIENT_ORIGIN` environment variable to the exact deployed frontend
-origin, `https://nidhikosh-app.vercel.app`, so the backend CORS allowlist matches
-production as well as local development.
+
+The Render deployment must set `TRUST_PROXY_HOPS=1`. Render terminates TLS at its
+ingress proxy; without trusting that hop, Express sees the forwarded request as
+insecure and suppresses the production `Secure` session cookie. The resulting
+`GET /api/auth/csrf` response has no session cookie, so the following login request
+fails CSRF validation with 403 before reaching the login handler. Verify that the
+CSRF response includes a `Set-Cookie` header for `__Host-depositguard.sid` and that
+the browser sends it on the subsequent login request. Keep the cookie `Secure`,
+`HttpOnly`, and `SameSite=Strict`.
+
+Set Render's `CLIENT_ORIGIN` to `https://nidhikosh-app.vercel.app` as well. This
+keeps the backend CORS allowlist correct if the API is accessed cross-origin;
+same-origin requests through the Vercel rewrite do not rely on CORS. No
+`VITE_API_URL` variable is required or read by the client.
 
 Server environment files resolve relative to the server module, independent of the
 working directory: `.env` then `.env.development` overrides during development.

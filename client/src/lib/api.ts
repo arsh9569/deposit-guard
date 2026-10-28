@@ -164,7 +164,14 @@ export async function signIn(email: string, password: string): Promise<PortalUse
     method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json', 'x-csrf-token': csrfToken },
     body: JSON.stringify({ email, password }),
   });
-  if (!response.ok) throw new ApiError(response.status === 401 ? 'Invalid email or password.' : 'Sign-in failed. Try again.', response.status);
+  if (!response.ok) {
+    const message = response.status === 401
+      ? 'Invalid email or password.'
+      : response.status === 403
+        ? 'Your secure sign-in session expired. Refresh the page and try again.'
+        : 'Sign-in failed. Try again.';
+    throw new ApiError(message, response.status);
+  }
   return ((await response.json()) as { user: PortalUser }).user;
 }
 
