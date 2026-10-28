@@ -1,26 +1,34 @@
 import { env } from '../config/env.js';
 import nodemailer from 'nodemailer';
+import type { SendMailOptions, Transporter } from 'nodemailer';
+
+interface OtpMailerDependencies {
+  smtpUser?: string;
+  smtpPassword?: string;
+  transport?: Pick<Transporter, 'sendMail'>;
+}
 
 export async function sendOtpEmail(
   recipientEmail: string,
   otp: string,
+  dependencies: OtpMailerDependencies = {},
 ): Promise<void> {
-  const smtpUser = env.SMTP_USER;
-  const smtpPassword = env.SMTP_APP_PASSWORD;
+  const smtpUser = dependencies.smtpUser ?? env.SMTP_USER;
+  const smtpPassword = dependencies.smtpPassword ?? env.SMTP_APP_PASSWORD;
 
   if (!smtpUser || !smtpPassword) {
     throw new Error('SMTP credentials are not configured');
   }
 
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: smtpUser,
-      pass: smtpPassword,
-    },
-  });
+  const transporter = dependencies.transport ?? nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: smtpUser,
+        pass: smtpPassword,
+      },
+    });
 
-  await transporter.sendMail({
+  const message: SendMailOptions = {
     from: `"NidhiKosh" <${smtpUser}>`,
     to: recipientEmail,
     subject: 'NidhiKosh - Email Verification OTP',
@@ -44,5 +52,6 @@ export async function sendOtpEmail(
         <p style="color:#64748b;font-size:13px">If you did not request this code, you can ignore this email.</p>
       </div>
     `,
-  });
+  };
+  await transporter.sendMail(message);
 }

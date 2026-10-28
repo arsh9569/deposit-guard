@@ -12,7 +12,7 @@
     "seed:demo": "tsx src/scripts/seed-demo.ts",
     "provision:demo-users": "tsx src/scripts/provision-demo-users.ts",
     "demo:maturity-scenario": "tsx src/scripts/run-maturity-scenario.ts",
-    "test": "tsx --test test/models.test.ts test/security.test.ts test/fdr-documents.test.ts test/workflows.test.ts test/dashboard-metrics.test.ts test/critical-scenarios.test.ts test/verification.test.ts test/api-availability.test.ts"
+    "test": "tsx --test test/models.test.ts test/security.test.ts test/otp.test.ts test/fdr-documents.test.ts test/workflows.test.ts test/dashboard-metrics.test.ts test/critical-scenarios.test.ts test/verification.test.ts test/api-availability.test.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.13",

@@ -13,6 +13,7 @@ import { csrfProtection } from '../src/middleware/csrf.js';
 import { requestIdMiddleware } from '../src/middleware/request-id.js';
 import { createAuthRouter } from '../src/routes/auth.js';
 import { privateDocumentFilter } from '../src/services/fdr-document-processing.js';
+import { defaultClientOrigin, defaultTrustProxyHops } from '../src/config/env.js';
 
 const institutionA = '64b000000000000000000001';
 const institutionB = '64b000000000000000000002';
@@ -200,6 +201,11 @@ test('CSRF token is required for state-changing requests', async () => {
 });
 
 test('production secure session cookies are issued only when the trusted TLS proxy is configured', async () => {
+  assert.equal(defaultTrustProxyHops('production'), 1);
+  assert.equal(defaultTrustProxyHops('development'), 0);
+  assert.equal(defaultClientOrigin('production'), 'https://nidhikosh-app.vercel.app');
+  assert.equal(defaultClientOrigin('development'), 'http://localhost:5173');
+
   const createCookieApp = (trustProxyHops: number) => {
     const app = express();
     app.set('trust proxy', trustProxyHops);
