@@ -354,20 +354,36 @@ export async function sendSignupOtp(email: string): Promise<void> {
     csrfToken: string;
   };
 
-  const response = await apiFetch('/api/auth/otp/send', {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'content-type': 'application/json',
-      'x-csrf-token': csrfToken,
-    },
-    body: JSON.stringify({ email }),
-  });
-
-  const result = (await response.json()) as {
-    message?: string;
-    error?: string;
-  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25_000);
+  let response: Response;
+  let result: { message?: string; error?: string };
+  try {
+    response = await apiFetch('/api/auth/otp/send', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'content-type': 'application/json',
+        'x-csrf-token': csrfToken,
+      },
+      body: JSON.stringify({ email }),
+      signal: controller.signal,
+    });
+    result = (await response.json()) as {
+      message?: string;
+      error?: string;
+    };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new ApiError('Sending the verification email timed out. Please try again.', 408);
+    }
+    if (error instanceof SyntaxError) {
+      throw new ApiError(unexpectedApiResponseMessage, 502);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
     throw new ApiError(

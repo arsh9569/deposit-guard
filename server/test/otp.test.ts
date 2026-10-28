@@ -27,6 +27,9 @@ function createMemoryOtpStore() {
         verifiedAt: null,
       });
     },
+    async discard(email: string, otpHash: string) {
+      if (records.get(email)?.otpHash === otpHash) records.delete(email);
+    },
     async incrementAttempts(id: string) {
       const record = records.get(id);
       if (record && !record.verifiedAt) record.attempts += 1;
@@ -119,6 +122,33 @@ test('OTP mailer builds and submits the verification email through its transport
   assert.match(sentMessages[0]?.html ?? '', /042917/);
 });
 
+test('OTP mailer requires credentials and closes a provider connection that exceeds its deadline', async () => {
+  await assert.rejects(
+    sendOtpEmail('recipient@example.test', '042917', {
+      smtpUser: '',
+      smtpPassword: '',
+    }),
+    /SMTP credentials are not configured/,
+  );
+
+  let closed = false;
+  await assert.rejects(
+    sendOtpEmail('recipient@example.test', '042917', {
+      smtpUser: 'sender@example.test',
+      smtpPassword: 'synthetic-test-password',
+      timeoutMs: 5,
+      transport: {
+        sendMail: () => new Promise<never>(() => {}),
+        close() {
+          closed = true;
+        },
+      },
+    }),
+    /OTP email delivery timed out/,
+  );
+  assert.equal(closed, true);
+});
+
 test('OTP send uses a session-bound CSRF token, stores only a hash, and invokes email delivery', async () => {
   const { records, store } = createMemoryOtpStore();
   const deliveries: { email: string; otp: string }[] = [];
@@ -158,6 +188,30 @@ test('OTP send uses a session-bound CSRF token, stores only a hash, and invokes 
     .send({ email: 'test.user@example.test' })
     .expect(429);
   assert.equal(deliveries.length, 1);
+});
+
+test('OTP provider failure returns a safe retry response and clears the undelivered code', async () => {
+  const { records, store } = createMemoryOtpStore();
+  const app = createAuthTestApp(
+    store,
+    async () => {
+      throw new Error('sensitive provider response and recipient details');
+    },
+    noAccountStore,
+  );
+  const agent = request.agent(app);
+  const csrf = await agent.get('/api/auth/csrf').expect(200);
+  const response = await agent
+    .post('/api/auth/otp/send')
+    .set('x-csrf-token', csrf.body.csrfToken as string)
+    .send({ email: 'recipient@example.test' })
+    .expect(503);
+
+  assert.deepEqual(response.body, {
+    error: 'Verification email could not be sent. Please try again shortly.',
+  });
+  assert.equal(records.has('recipient@example.test'), false);
+  assert.doesNotMatch(JSON.stringify(response.body), /sensitive|recipient@example/);
 });
 
 test('OTP rejects invalid, expired, and reused codes and permits registration once', async () => {
@@ -308,4 +362,33 @@ test('OTP verification requires CSRF and rejects requests without the session to
     .post('/api/auth/otp/send')
     .send({ email: 'test@example.test' })
     .expect(403, { error: 'CSRF validation failed' });
+});
+
+test('OTP send enforces its per-IP request rate limit', async () => {
+  const { store } = createMemoryOtpStore();
+  const deliveries: string[] = [];
+  const app = createAuthTestApp(
+    store,
+    async (email) => {
+      deliveries.push(email);
+    },
+    noAccountStore,
+  );
+  const agent = request.agent(app);
+  const csrf = await agent.get('/api/auth/csrf').expect(200);
+  const csrfToken = csrf.body.csrfToken as string;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await agent
+      .post('/api/auth/otp/send')
+      .set('x-csrf-token', csrfToken)
+      .send({ email: `test-${attempt}@example.test` })
+      .expect(200);
+  }
+  await agent
+    .post('/api/auth/otp/send')
+    .set('x-csrf-token', csrfToken)
+    .send({ email: 'rate-limited@example.test' })
+    .expect(429);
+  assert.equal(deliveries.length, 10);
 });

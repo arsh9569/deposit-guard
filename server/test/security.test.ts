@@ -131,6 +131,21 @@ test('unauthenticated request is denied', async () => {
   assert.deepEqual(response.body, { error: 'Authentication required' });
 });
 
+test('session restoration returns 401 when signed out and the user after a successful login', async () => {
+  const app = makeApp();
+  await request(app)
+    .get('/api/auth/me')
+    .expect(401, { error: 'Authentication required' });
+
+  const agent = request.agent(app);
+  await login(agent, users[0]!.email);
+  const restored = await agent
+    .get('/api/auth/me')
+    .expect(200);
+  assert.equal(restored.body.user.id, userAId);
+  assert.equal(restored.body.user.email, users[0]!.email);
+});
+
 test('cross-institution access is denied even when caller supplies another institution ID', async () => {
   const agent = request.agent(makeApp());
   await login(agent, users[0]!.email);
@@ -198,6 +213,17 @@ test('CSRF token is required for state-changing requests', async () => {
     password,
   });
   assert.equal(response.status, 403);
+});
+
+test('CSRF rejects a token that does not match the session', async () => {
+  const agent = request.agent(makeApp());
+  await agent.get('/api/auth/csrf').expect(200);
+  const response = await agent
+    .post('/api/auth/login')
+    .set('x-csrf-token', 'not-the-session-token')
+    .send({ email: users[0]!.email, password });
+  assert.equal(response.status, 403);
+  assert.deepEqual(response.body, { error: 'CSRF validation failed' });
 });
 
 test('production secure session cookies are issued only when the trusted TLS proxy is configured', async () => {

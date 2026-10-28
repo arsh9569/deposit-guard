@@ -18,6 +18,7 @@ export interface OtpRecord {
 interface OtpStore {
   findByEmail(email: string): Promise<OtpRecord | null>;
   save(email: string, otpHash: string, now: Date): Promise<void>;
+  discard(email: string, otpHash: string): Promise<void>;
   incrementAttempts(id: string): Promise<void>;
   markVerified(id: string, now: Date): Promise<boolean>;
 }
@@ -29,7 +30,7 @@ interface OtpRouterDependencies {
 
 const databaseOtpStore: OtpStore = {
   async findByEmail(email) {
-    const record = await EmailOtp.findOne({ email });
+    const record = await EmailOtp.findOne({ email }).maxTimeMS(5_000);
     if (!record) return null;
     return {
       id: String(record._id),
@@ -52,13 +53,17 @@ const databaseOtpStore: OtpStore = {
           verifiedAt: null,
         },
       },
-      { upsert: true, new: true },
+      { upsert: true, new: true, maxTimeMS: 5_000 },
     );
+  },
+  async discard(email, otpHash) {
+    await EmailOtp.deleteOne({ email, otpHash }, { maxTimeMS: 5_000 });
   },
   async incrementAttempts(id) {
     await EmailOtp.updateOne(
       { _id: id, verifiedAt: null },
       { $inc: { attempts: 1 } },
+      { maxTimeMS: 5_000 },
     );
   },
   async markVerified(id, now) {
@@ -70,6 +75,7 @@ const databaseOtpStore: OtpStore = {
         attempts: { $lt: 5 },
       },
       { $set: { verifiedAt: now } },
+      { maxTimeMS: 5_000 },
     );
     return result.modifiedCount === 1;
   },
@@ -124,7 +130,23 @@ export function createOtpRouter(dependencies: OtpRouterDependencies = {}): Route
           .digest('hex');
 
       await store.save(email, otpHash, now);
-      await deliverOtp(email, otp);
+      try {
+        await deliverOtp(email, otp);
+      } catch (error) {
+        await store.discard(email, otpHash);
+        console.error(
+          JSON.stringify({
+            event: 'otp_delivery_failed',
+            requestId: req.requestId,
+            errorType:
+              error instanceof Error ? error.constructor.name : 'UnknownError',
+          }),
+        );
+        res.status(503).json({
+          error: 'Verification email could not be sent. Please try again shortly.',
+        });
+        return;
+      }
 
       res.json({
         message: 'OTP sent successfully',

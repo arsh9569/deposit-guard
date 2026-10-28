@@ -25,6 +25,15 @@ test('API client rejects non-JSON responses with a safe routing error before par
   assert.match(api, /apiFetch\('\/api\/auth\/login',\s*\{\s*method: 'POST'/);
 });
 
+test('OTP send uses the same-origin API with credentials and a bounded request timeout', () => {
+  assert.match(api, /apiFetch\('\/api\/auth\/otp\/send'/);
+  assert.match(api, /credentials: 'include'/);
+  assert.match(api, /'x-csrf-token': csrfToken/);
+  assert.match(api, /setTimeout\(\(\) => controller\.abort\(\), 25_000\)/);
+  assert.match(api, /result = \(await response\.json\(\)\)[\s\S]*?finally \{\s*clearTimeout\(timeout\)/);
+  assert.match(api, /clearTimeout\(timeout\)/);
+});
+
 test('mobile layout has tablet and phone breakpoints that collapse the sidebar and columns', () => {
   assert.match(styles, /@media\s*\(max-width:\s*900px\)/);
   assert.match(styles, /@media\s*\(max-width:\s*640px\)/);

@@ -5,8 +5,15 @@ import type { SendMailOptions, Transporter } from 'nodemailer';
 interface OtpMailerDependencies {
   smtpUser?: string;
   smtpPassword?: string;
-  transport?: Pick<Transporter, 'sendMail'>;
+  transport?: Pick<Transporter, 'sendMail'> &
+    Partial<Pick<Transporter, 'close'>>;
+  timeoutMs?: number;
 }
+
+const connectionTimeoutMs = 10_000;
+const greetingTimeoutMs = 10_000;
+const socketTimeoutMs = 15_000;
+const deliveryTimeoutMs = 20_000;
 
 export async function sendOtpEmail(
   recipientEmail: string,
@@ -21,12 +28,15 @@ export async function sendOtpEmail(
   }
 
   const transporter = dependencies.transport ?? nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: smtpUser,
-        pass: smtpPassword,
-      },
-    });
+    service: 'gmail',
+    connectionTimeout: connectionTimeoutMs,
+    greetingTimeout: greetingTimeoutMs,
+    socketTimeout: socketTimeoutMs,
+    auth: {
+      user: smtpUser,
+      pass: smtpPassword,
+    },
+  });
 
   const message: SendMailOptions = {
     from: `"NidhiKosh" <${smtpUser}>`,
@@ -53,5 +63,22 @@ export async function sendOtpEmail(
       </div>
     `,
   };
-  await transporter.sendMail(message);
+  const timeoutError = new Error('OTP email delivery timed out');
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      transporter.sendMail(message),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(timeoutError),
+          dependencies.timeoutMs ?? deliveryTimeoutMs,
+        );
+      }),
+    ]);
+  } catch (error) {
+    if (error === timeoutError) transporter.close?.();
+    throw error;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
